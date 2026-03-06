@@ -39,7 +39,7 @@ class ContentExtractor:
         """Use trafilatura to extract the main body content."""
         extracted = trafilatura.extract(
             result.html,
-            output_format="txt",
+            output_format="markdown",
             include_links=True,
             include_tables=True,
         )
