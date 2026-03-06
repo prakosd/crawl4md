@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import re
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -47,9 +49,24 @@ class SiteCrawler:
         file listing every crawled URL.
         """
         self.output_dir = self._create_output_dir()
-        results = asyncio.run(self._crawl_async())
+        if sys.platform == "win32":
+            # Windows Jupyter uses SelectorEventLoop which doesn't support
+            # subprocesses needed by Playwright. Run in a ProactorEventLoop
+            # on a separate thread.
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                results = pool.submit(self._crawl_in_proactor_loop).result()
+        else:
+            results = asyncio.run(self._crawl_async())
         self._save_url_list(results)
         return results
+
+    def _crawl_in_proactor_loop(self) -> list[CrawlResult]:
+        loop = asyncio.ProactorEventLoop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(self._crawl_async())
+        finally:
+            loop.close()
 
     # ------------------------------------------------------------------
     # Internals
