@@ -36,6 +36,14 @@ class TestSiteCrawler:
         crawler = SiteCrawler(config)
         assert crawler._url_allowed("https://example.com/any") is True
 
+    def test_url_allowed_rejects_external_domain(self):
+        config = CrawlerConfig(urls=["https://www.starhub.com/personal/support.html"])
+        crawler = SiteCrawler(config)
+        assert crawler._url_allowed("https://www.starhub.com/personal/page") is True
+        assert crawler._url_allowed("https://starhub.com/other") is True
+        assert crawler._url_allowed("https://sub.starhub.com/page") is True
+        assert crawler._url_allowed("https://otherdomain.com/page") is False
+
     def test_url_allowed_exclude(self):
         config = CrawlerConfig(
             urls=["https://example.com"], exclude_paths=[r"/admin"]

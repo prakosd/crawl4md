@@ -37,6 +37,7 @@ class SiteCrawler:
         self.page_config = page_config or PageConfig()
         self._output_base = Path(output_base) if output_base else Path.cwd()
         self.output_dir: Path | None = None
+        self._allowed_domains: set[str] = self._extract_base_domains(config.urls)
 
     # ------------------------------------------------------------------
     # Public API
@@ -154,8 +155,16 @@ class SiteCrawler:
         """Check whether a URL passes include/exclude filters."""
         from urllib.parse import urlparse
 
-        # Block boilerplate browser-upgrade domains
         parsed = urlparse(url)
+
+        # Restrict to the same base domain(s) as the seed URLs
+        if self._allowed_domains and not any(
+            parsed.netloc == d or parsed.netloc.endswith("." + d)
+            for d in self._allowed_domains
+        ):
+            return False
+
+        # Block boilerplate browser-upgrade domains
         netloc_path = parsed.netloc + parsed.path
         if any(netloc_path.startswith(d) or netloc_path.startswith("www." + d)
                for d in self._BOILERPLATE_DOMAINS):
@@ -186,6 +195,20 @@ class SiteCrawler:
         "browsehappy.com",
         "google.com",
     ))
+
+    @staticmethod
+    def _extract_base_domains(urls: list[str]) -> set[str]:
+        """Derive base domains from seed URLs (e.g. 'starhub.com' from 'www.starhub.com')."""
+        from urllib.parse import urlparse
+
+        domains: set[str] = set()
+        for url in urls:
+            netloc = urlparse(url).netloc.lower()
+            # Strip www. prefix to get the base domain
+            if netloc.startswith("www."):
+                netloc = netloc[4:]
+            domains.add(netloc)
+        return domains
 
     @staticmethod
     def _extract_links(result: CrawlResult, base_url: str) -> list[str]:
