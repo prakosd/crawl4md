@@ -17,3 +17,6 @@ env/
 htmlcov/
 .mypy_cache/
 .ipynb_checkpoints/
+
+# Crawl output directories (timestamped folders created by crawl4md)
+notebooks/*/
