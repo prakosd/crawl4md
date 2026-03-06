@@ -16,6 +16,7 @@ class CrawlerConfig(BaseModel):
     include_only_paths: list[str] = []
     limit: int = 1
     max_depth: int = 1
+    flush_interval: int = 10
 
     @field_validator("urls", mode="before")
     @classmethod
@@ -53,7 +54,7 @@ class CrawlerConfig(BaseModel):
                 raise ValueError(f"Invalid regex pattern '{pattern}': {e}") from e
         return v
 
-    @field_validator("limit", "max_depth")
+    @field_validator("limit", "max_depth", "flush_interval")
     @classmethod
     def validate_positive(cls, v: int) -> int:
         if v < 1:

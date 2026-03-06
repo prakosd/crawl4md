@@ -122,6 +122,10 @@ class SiteCrawler:
                 results.append(crawl_result)
                 progress.update(url)
 
+                # Flush urls.txt periodically so progress is saved on disk
+                if len(results) % self.config.flush_interval == 0:
+                    self._save_url_list(results)
+
                 # Discover links for deeper crawling
                 if depth < self.config.max_depth and crawl_result.success:
                     new_links = self._extract_links(crawl_result, url)
