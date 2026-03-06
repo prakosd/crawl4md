@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime, timedelta
 
 
 def _in_notebook() -> bool:
@@ -21,9 +22,10 @@ def _in_notebook() -> bool:
 class ProgressReporter:
     """Displays crawl progress to the user in real time."""
 
-    def __init__(self, total: int) -> None:
+    def __init__(self, total: int, *, action: str = "Crawled") -> None:
         self.total = total
         self.count = 0
+        self.action = action
         self._start_time = time.time()
         self._use_notebook = _in_notebook()
 
@@ -32,27 +34,46 @@ class ProgressReporter:
         minutes, secs = divmod(seconds, 60)
         return f"{minutes:02d}:{secs:02d}"
 
+    def _eta_remaining(self) -> str:
+        """Estimated time remaining."""
+        if self.count == 0:
+            return "estimating..."
+        elapsed = time.time() - self._start_time
+        remaining = elapsed / self.count * (self.total - self.count)
+        mins, secs = divmod(int(remaining), 60)
+        hours, mins = divmod(mins, 60)
+        if hours > 0:
+            return f"{hours}h {mins:02d}m {secs:02d}s"
+        return f"{mins:02d}:{secs:02d}"
+
+    def _eta_finish_time(self) -> str:
+        """Estimated wall-clock finish time."""
+        if self.count == 0:
+            return "estimating..."
+        elapsed = time.time() - self._start_time
+        remaining = elapsed / self.count * (self.total - self.count)
+        finish = datetime.now() + timedelta(seconds=remaining)
+        return finish.strftime("%H:%M:%S")
+
     def update(self, url: str) -> None:
-        """Report that a page has been crawled."""
+        """Report that a page has been processed."""
         self.count += 1
-        msg = (
-            f"[{self.count}/{self.total}] ({self._elapsed()}) Crawled: {url}"
-        )
+        eta = f"~{self._eta_remaining()} left, done ~{self._eta_finish_time()}"
+        msg = f"[{self.count}/{self.total}] ({self._elapsed()}) {self.action}: {url}"
 
         if self._use_notebook:
             from IPython.display import clear_output, display  # type: ignore[import-untyped]
 
             clear_output(wait=True)
-            display(_ProgressWidget(self.count, self.total, msg))
+            display(_ProgressWidget(self.count, self.total, msg, eta))
         else:
-            print(msg)
+            print(f"{msg}  |  {eta}")
 
-    def finish(self, output_dir: str) -> None:
-        """Report that crawling is complete."""
-        msg = (
-            f"\nDone! Crawled {self.count} page(s) in {self._elapsed()}.\n"
-            f"Output folder: {output_dir}"
-        )
+    def finish(self, output_dir: str | None = None) -> None:
+        """Report that processing is complete."""
+        msg = f"\nDone! {self.action} {self.count} page(s) in {self._elapsed()}."
+        if output_dir:
+            msg += f"\nOutput folder: {output_dir}"
         if self._use_notebook:
             from IPython.display import clear_output  # type: ignore[import-untyped]
 
@@ -65,10 +86,11 @@ class ProgressReporter:
 class _ProgressWidget:
     """Simple HTML progress bar for Jupyter notebooks."""
 
-    def __init__(self, current: int, total: int, label: str) -> None:
+    def __init__(self, current: int, total: int, label: str, eta: str = "") -> None:
         self.current = current
         self.total = total
         self.label = label
+        self.eta = eta
 
     def _repr_html_(self) -> str:
         pct = int(self.current / self.total * 100) if self.total else 0
@@ -77,5 +99,6 @@ class _ProgressWidget:
             f'<div style="background:#eee;border-radius:4px;overflow:hidden;height:20px;">'
             f'<div style="background:#4CAF50;height:100%;width:{pct}%;'
             f'transition:width 0.3s;"></div></div>'
-            f"<div>{self.current} / {self.total} pages</div>"
+            f"<div>{self.current} / {self.total} pages"
+            f"{(' &nbsp;|&nbsp; ' + self.eta) if self.eta else ''}</div>"
         )

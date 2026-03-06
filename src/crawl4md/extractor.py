@@ -6,6 +6,7 @@ import trafilatura
 from markdownify import markdownify
 
 from crawl4md.config import CrawlResult, ExtractedPage, PageConfig
+from crawl4md.progress import ProgressReporter
 
 
 class ContentExtractor:
@@ -20,13 +21,15 @@ class ContentExtractor:
 
     def extract(self, results: list[CrawlResult]) -> list[ExtractedPage]:
         """Convert a list of crawl results into extracted Markdown pages."""
+        successful = [r for r in results if r.success]
+        progress = ProgressReporter(len(successful), action="Extracted")
         pages: list[ExtractedPage] = []
-        for result in results:
-            if not result.success:
-                continue
+        for result in successful:
             page = self._extract_page(result)
+            progress.update(result.url)
             if page.markdown.strip():
                 pages.append(page)
+        progress.finish()
         return pages
 
     def _extract_page(self, result: CrawlResult) -> ExtractedPage:
