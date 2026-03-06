@@ -1,0 +1,106 @@
+"""Tests for crawl4md.crawler — SiteCrawler (mocked)."""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from crawl4md.config import CrawlerConfig
+from crawl4md.crawler import SiteCrawler
+
+
+def _make_mock_result(url: str, html: str = "<p>hello</p>", markdown: str = "hello"):
+    """Create a mock crawl4ai result object."""
+    result = MagicMock()
+    result.url = url
+    result.html = html
+    result.markdown = markdown
+    result.success = True
+    return result
+
+
+class TestSiteCrawler:
+    def test_creates_timestamped_output_dir(self, tmp_path: Path):
+        config = CrawlerConfig(urls=["https://example.com"])
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        output_dir = crawler._create_output_dir()
+
+        assert output_dir.exists()
+        assert output_dir.parent == tmp_path
+        # Matches YYYY-MM-DD_HH-MM-SS
+        assert re.match(r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}", output_dir.name)
+
+    def test_url_allowed_no_filters(self):
+        config = CrawlerConfig(urls=["https://example.com"])
+        crawler = SiteCrawler(config)
+        assert crawler._url_allowed("https://example.com/any") is True
+
+    def test_url_allowed_exclude(self):
+        config = CrawlerConfig(
+            urls=["https://example.com"], exclude_paths=[r"/admin"]
+        )
+        crawler = SiteCrawler(config)
+        assert crawler._url_allowed("https://example.com/admin/settings") is False
+        assert crawler._url_allowed("https://example.com/blog") is True
+
+    def test_url_allowed_include_only(self):
+        config = CrawlerConfig(
+            urls=["https://example.com"], include_only_paths=[r"/blog"]
+        )
+        crawler = SiteCrawler(config)
+        assert crawler._url_allowed("https://example.com/blog/post1") is True
+        assert crawler._url_allowed("https://example.com/about") is False
+
+    def test_extract_links(self):
+        from crawl4md.config import CrawlResult
+
+        result = CrawlResult(
+            url="https://example.com",
+            html='<a href="/page1">P1</a> <a href="https://other.com">O</a> <a href="#frag">F</a>',
+            success=True,
+        )
+        links = SiteCrawler._extract_links(result, "https://example.com")
+        assert "https://example.com/page1" in links
+        assert "https://other.com" in links
+        # Fragment-only links are resolved to the base URL
+        assert all(not link.endswith("#frag") for link in links)
+
+    def test_save_url_list(self, tmp_path: Path):
+        from crawl4md.config import CrawlResult
+
+        config = CrawlerConfig(urls=["https://example.com"])
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        crawler.output_dir = tmp_path
+
+        results = [
+            CrawlResult(url="https://example.com/a", success=True),
+            CrawlResult(url="https://example.com/b", success=True),
+        ]
+        crawler._save_url_list(results)
+
+        urls_file = tmp_path / "urls.txt"
+        assert urls_file.exists()
+        lines = urls_file.read_text(encoding="utf-8").splitlines()
+        assert lines == ["https://example.com/a", "https://example.com/b"]
+
+    @patch("crawl4md.crawler.AsyncWebCrawler")
+    def test_crawl_single_page(self, mock_crawler_cls, tmp_path: Path):
+        """Test that crawl() returns results and creates output."""
+        mock_result = _make_mock_result("https://example.com", "<p>hi</p>", "hi")
+
+        mock_instance = AsyncMock()
+        mock_instance.arun = AsyncMock(return_value=mock_result)
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_crawler_cls.return_value = mock_instance
+
+        config = CrawlerConfig(urls=["https://example.com"], limit=1)
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        results = crawler.crawl()
+
+        assert len(results) == 1
+        assert results[0].url == "https://example.com"
+        assert results[0].success is True
+        assert crawler.output_dir is not None
+        assert (crawler.output_dir / "urls.txt").exists()

@@ -1,0 +1,166 @@
+"""SiteCrawler — synchronous wrapper around Crawl4AI."""
+
+from __future__ import annotations
+
+import asyncio
+import re
+from datetime import datetime
+from pathlib import Path
+
+import nest_asyncio
+from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
+
+from crawl4md.config import CrawlerConfig, CrawlResult, PageConfig
+from crawl4md.progress import ProgressReporter
+
+# Allow asyncio.run() inside Jupyter's already-running event loop
+nest_asyncio.apply()
+
+
+class SiteCrawler:
+    """Crawls websites and collects HTML/Markdown content.
+
+    Provides a synchronous ``crawl()`` method that wraps Crawl4AI's
+    asynchronous crawler so non-technical users never see ``async``/``await``.
+    """
+
+    def __init__(
+        self,
+        config: CrawlerConfig,
+        page_config: PageConfig | None = None,
+        *,
+        output_base: Path | str | None = None,
+    ) -> None:
+        self.config = config
+        self.page_config = page_config or PageConfig()
+        self._output_base = Path(output_base) if output_base else Path.cwd()
+        self.output_dir: Path | None = None
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def crawl(self) -> list[CrawlResult]:
+        """Crawl the configured URLs and return results.
+
+        Creates a timestamped output folder and writes a ``urls.txt``
+        file listing every crawled URL.
+        """
+        self.output_dir = self._create_output_dir()
+        results = asyncio.run(self._crawl_async())
+        self._save_url_list(results)
+        return results
+
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
+
+    async def _crawl_async(self) -> list[CrawlResult]:
+        browser_cfg = BrowserConfig(headless=True)
+        run_cfg = self._build_run_config(CrawlerRunConfig)
+
+        results: list[CrawlResult] = []
+        visited: set[str] = set()
+        queue: list[tuple[str, int]] = [(url, 0) for url in self.config.urls]
+        progress = ProgressReporter(self.config.limit)
+
+        async with AsyncWebCrawler(config=browser_cfg) as crawler:
+            while queue and len(results) < self.config.limit:
+                url, depth = queue.pop(0)
+
+                if url in visited:
+                    continue
+                visited.add(url)
+
+                if not self._url_allowed(url):
+                    continue
+
+                try:
+                    result = await crawler.arun(url=url, config=run_cfg)
+
+                    crawl_result = CrawlResult(
+                        url=url,
+                        html=result.html or "",
+                        markdown=result.markdown or "",
+                        success=result.success,
+                        error=None if result.success else str(getattr(result, "error", "")),
+                    )
+                except Exception as exc:
+                    crawl_result = CrawlResult(
+                        url=url,
+                        html="",
+                        markdown="",
+                        success=False,
+                        error=str(exc),
+                    )
+
+                results.append(crawl_result)
+                progress.update(url)
+
+                # Discover links for deeper crawling
+                if depth < self.config.max_depth and crawl_result.success:
+                    new_links = self._extract_links(crawl_result, url)
+                    for link in new_links:
+                        if link not in visited:
+                            queue.append((link, depth + 1))
+
+        assert self.output_dir is not None
+        progress.finish(str(self.output_dir))
+        return results
+
+    def _build_run_config(self, run_config_cls: type) -> object:
+        """Map PageConfig to a Crawl4AI CrawlerRunConfig."""
+        kwargs: dict = {}
+
+        if self.page_config.exclude_tags:
+            kwargs["excluded_tags"] = self.page_config.exclude_tags
+
+        if self.page_config.wait_for:
+            kwargs["wait_for"] = f"js:await new Promise(r => setTimeout(r, {int(self.page_config.wait_for * 1000)}))"
+
+        if self.page_config.timeout:
+            kwargs["page_timeout"] = self.page_config.timeout
+
+        return run_config_cls(**kwargs)
+
+    def _url_allowed(self, url: str) -> bool:
+        """Check whether a URL passes include/exclude filters."""
+        if self.config.include_only_paths and not any(
+            re.search(p, url) for p in self.config.include_only_paths
+        ):
+            return False
+
+        return not (
+            self.config.exclude_paths
+            and any(re.search(p, url) for p in self.config.exclude_paths)
+        )
+
+    @staticmethod
+    def _extract_links(result: CrawlResult, base_url: str) -> list[str]:
+        """Extract absolute http(s) links from crawled HTML."""
+        from urllib.parse import urljoin
+
+        links: list[str] = []
+        for match in re.finditer(r'href=["\']([^"\']+)["\']', result.html):
+            href = match.group(1)
+            absolute = urljoin(base_url, href)
+            if absolute.startswith(("http://", "https://")):
+                # Strip fragments
+                absolute = absolute.split("#")[0]
+                if absolute not in links:
+                    links.append(absolute)
+        return links
+
+    def _create_output_dir(self) -> Path:
+        """Create and return a timestamped output directory."""
+        folder_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        output_dir = self._output_base / folder_name
+        output_dir.mkdir(parents=True, exist_ok=True)
+        return output_dir
+
+    def _save_url_list(self, results: list[CrawlResult]) -> None:
+        """Write urls.txt with one URL per line."""
+        assert self.output_dir is not None
+        urls_file = self.output_dir / "urls.txt"
+        lines = [r.url for r in results]
+        urls_file.write_text("\n".join(lines), encoding="utf-8")
