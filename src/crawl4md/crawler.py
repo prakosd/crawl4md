@@ -179,6 +179,9 @@ class SiteCrawler:
         links: list[str] = []
         for match in re.finditer(r'href=["\']([^"\']+)["\']', result.html):
             href = match.group(1)
+            # Skip unresolved template placeholders (e.g. ${var}, {{var}}, {%var%})
+            if re.search(r"\$\{|%7B%7B|\{\{|\{%", href):
+                continue
             absolute = urljoin(base_url, href)
             if absolute.startswith(("http://", "https://")):
                 # Strip fragments

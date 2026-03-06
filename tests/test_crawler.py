@@ -91,6 +91,24 @@ class TestSiteCrawler:
         assert "https://example.com/font.woff2" not in links
         assert "https://example.com/doc.pdf" not in links
 
+    def test_extract_links_skips_template_placeholders(self):
+        from crawl4md.config import CrawlResult
+
+        result = CrawlResult(
+            url="https://example.com",
+            html=(
+                '<a href="/page1">P1</a>'
+                '<a href="https://example.com/${offer_url}">Offer</a>'
+                '<a href="https://example.com/${msa_link}">MSA</a>'
+                '<a href="https://example.com/{{slug}}">Slug</a>'
+                '<a href="https://example.com/{%url%}">Django</a>'
+            ),
+            success=True,
+        )
+        links = SiteCrawler._extract_links(result, "https://example.com")
+        assert "https://example.com/page1" in links
+        assert len(links) == 1  # Only the real link survives
+
     def test_save_url_list(self, tmp_path: Path):
         from crawl4md.config import CrawlResult
 
