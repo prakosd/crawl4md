@@ -6,8 +6,10 @@ import re
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from crawl4md.config import CrawlerConfig
+from crawl4md.config import CrawlerConfig, ExtractedPage
 from crawl4md.crawler import SiteCrawler
+from crawl4md.extractor import ContentExtractor
+from crawl4md.writer import FileWriter
 
 
 def _make_mock_result(url: str, html: str = "<p>hello</p>", markdown: str = "hello"):
@@ -167,3 +169,33 @@ class TestSiteCrawler:
         assert run_cfg.simulate_user is True
         assert run_cfg.override_navigator is True
         assert run_cfg.magic is True
+
+    @patch("crawl4md.crawler.AsyncWebCrawler")
+    def test_crawl_with_extractor_and_writer(self, mock_crawler_cls, tmp_path: Path):
+        """Content files are written incrementally when extractor/writer are provided."""
+        html = "<html><head><title>Test</title></head><body><p>Hello world</p></body></html>"
+        mock_result = _make_mock_result("https://example.com", html, "Hello world")
+
+        mock_instance = AsyncMock()
+        mock_instance.arun = AsyncMock(return_value=mock_result)
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_crawler_cls.return_value = mock_instance
+
+        from crawl4md.config import PageConfig
+
+        config = CrawlerConfig(urls=["https://example.com"], limit=1, flush_interval=1)
+        page_config = PageConfig(extract_main_content=False)
+        extractor = ContentExtractor(page_config)
+        writer = FileWriter(max_file_size_mb=15.0)
+
+        crawler = SiteCrawler(
+            config, page_config, output_base=tmp_path,
+            extractor=extractor, writer=writer,
+        )
+        results = crawler.crawl()
+
+        assert len(results) == 1
+        assert len(crawler.content_files) >= 1
+        content = crawler.content_files[0].read_text(encoding="utf-8")
+        assert "https://example.com" in content

@@ -13,7 +13,9 @@ import nest_asyncio
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 
 from crawl4md.config import CrawlerConfig, CrawlResult, PageConfig
+from crawl4md.extractor import ContentExtractor
 from crawl4md.progress import ProgressReporter
+from crawl4md.writer import FileWriter
 
 # Allow asyncio.run() inside Jupyter's already-running event loop
 nest_asyncio.apply()
@@ -32,12 +34,17 @@ class SiteCrawler:
         page_config: PageConfig | None = None,
         *,
         output_base: Path | str | None = None,
+        extractor: ContentExtractor | None = None,
+        writer: FileWriter | None = None,
     ) -> None:
         self.config = config
         self.page_config = page_config or PageConfig()
         self._output_base = Path(output_base) if output_base else Path.cwd()
         self.output_dir: Path | None = None
         self._allowed_domains: set[str] = self._extract_base_domains(config.urls)
+        self._extractor = extractor
+        self._writer = writer
+        self.content_files: list[Path] = []
 
     # ------------------------------------------------------------------
     # Public API
@@ -50,6 +57,9 @@ class SiteCrawler:
         file listing every crawled URL.
         """
         self.output_dir = self._create_output_dir()
+        # Attach output_dir to writer so incremental flushes land there
+        if self._writer is not None:
+            self._writer._output_dir = self.output_dir
         if sys.platform == "win32":
             # Windows Jupyter uses SelectorEventLoop which doesn't support
             # subprocesses needed by Playwright. Run in a ProactorEventLoop
@@ -59,6 +69,9 @@ class SiteCrawler:
         else:
             results = asyncio.run(self._crawl_async())
         self._save_url_list(results)
+        # Flush any remaining content and record written files
+        if self._writer is not None:
+            self.content_files = self._writer.flush()
         return results
 
     def _crawl_in_proactor_loop(self) -> list[CrawlResult]:
@@ -125,9 +138,17 @@ class SiteCrawler:
                 results.append(crawl_result)
                 progress.update(url)
 
-                # Flush urls.txt periodically so progress is saved on disk
+                # Extract and buffer content incrementally
+                if crawl_result.success and self._extractor and self._writer:
+                    page = self._extractor._extract_page(crawl_result)
+                    if page.markdown.strip():
+                        self._writer.add(page)
+
+                # Flush urls.txt and content files periodically
                 if len(results) % self.config.flush_interval == 0:
                     self._save_url_list(results)
+                    if self._writer is not None:
+                        self._writer.flush()
 
                 # Discover links for deeper crawling
                 if depth < self.config.max_depth and crawl_result.success:
