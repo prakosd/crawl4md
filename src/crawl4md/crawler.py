@@ -148,7 +148,7 @@ class SiteCrawler:
             kwargs["excluded_tags"] = self.page_config.exclude_tags
 
         if self.page_config.wait_for:
-            kwargs["wait_for"] = f"js:await new Promise(r => setTimeout(r, {int(self.page_config.wait_for * 1000)}))"
+            kwargs["delay_before_return_html"] = self.page_config.wait_for
 
         if self.page_config.timeout:
             kwargs["page_timeout"] = self.page_config.timeout
