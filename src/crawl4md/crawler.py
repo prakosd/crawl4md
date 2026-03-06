@@ -152,6 +152,15 @@ class SiteCrawler:
 
     def _url_allowed(self, url: str) -> bool:
         """Check whether a URL passes include/exclude filters."""
+        from urllib.parse import urlparse
+
+        # Block boilerplate browser-upgrade domains
+        parsed = urlparse(url)
+        netloc_path = parsed.netloc + parsed.path
+        if any(netloc_path.startswith(d) or netloc_path.startswith("www." + d)
+               for d in self._BOILERPLATE_DOMAINS):
+            return False
+
         if self.config.include_only_paths and not any(
             re.search(p, url) for p in self.config.include_only_paths
         ):
@@ -171,6 +180,13 @@ class SiteCrawler:
         ".xml", ".json", ".rss", ".atom",
     ))
 
+    # Domains that appear as boilerplate "upgrade your browser" links on
+    # many websites and are never useful crawl targets.
+    _BOILERPLATE_DOMAINS = frozenset((
+        "browsehappy.com",
+        "google.com",
+    ))
+
     @staticmethod
     def _extract_links(result: CrawlResult, base_url: str) -> list[str]:
         """Extract absolute http(s) links from crawled HTML."""
@@ -186,8 +202,14 @@ class SiteCrawler:
             if absolute.startswith(("http://", "https://")):
                 # Strip fragments
                 absolute = absolute.split("#")[0]
+                # Skip boilerplate browser-upgrade links
+                parsed = urlparse(absolute)
+                netloc_path = parsed.netloc + parsed.path
+                if any(netloc_path.startswith(d) or netloc_path.startswith("www." + d)
+                       for d in SiteCrawler._BOILERPLATE_DOMAINS):
+                    continue
                 # Skip static asset URLs
-                path = urlparse(absolute).path.lower()
+                path = parsed.path.lower()
                 if any(path.endswith(ext) for ext in SiteCrawler._STATIC_ASSET_EXTENSIONS):
                     continue
                 if absolute not in links:
