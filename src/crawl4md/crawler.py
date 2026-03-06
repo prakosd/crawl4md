@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import random
 import re
 import sys
 from datetime import datetime
@@ -149,6 +150,11 @@ class SiteCrawler:
                     self._save_url_list(results)
                     if self._writer is not None:
                         self._writer.flush()
+
+                # Throttle between pages to avoid triggering bot detection
+                if self.config.delay > 0:
+                    jitter = self.config.delay * random.uniform(0.5, 1.5)
+                    await asyncio.sleep(jitter)
 
                 # Discover links for deeper crawling
                 if depth < self.config.max_depth and crawl_result.success:

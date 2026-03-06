@@ -17,6 +17,7 @@ class CrawlerConfig(BaseModel):
     limit: int = 1
     max_depth: int = 1
     flush_interval: int = 10
+    delay: float = 0
     stealth: bool = False
 
     @field_validator("urls", mode="before")
@@ -60,6 +61,13 @@ class CrawlerConfig(BaseModel):
     def validate_positive(cls, v: int) -> int:
         if v < 1:
             raise ValueError("Value must be at least 1.")
+        return v
+
+    @field_validator("delay")
+    @classmethod
+    def validate_delay(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("Delay must be non-negative.")
         return v
 
 
