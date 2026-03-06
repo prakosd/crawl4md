@@ -32,6 +32,11 @@ class TestCrawlerConfig:
         assert cfg.max_depth == 1
         assert cfg.exclude_paths == []
         assert cfg.include_only_paths == []
+        assert cfg.stealth is False
+
+    def test_stealth_enabled(self):
+        cfg = CrawlerConfig(urls=["https://example.com"], stealth=True)
+        assert cfg.stealth is True
 
     def test_limit_must_be_positive(self):
         with pytest.raises(ValueError, match="at least 1"):

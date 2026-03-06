@@ -17,6 +17,7 @@ class CrawlerConfig(BaseModel):
     limit: int = 1
     max_depth: int = 1
     flush_interval: int = 10
+    stealth: bool = False
 
     @field_validator("urls", mode="before")
     @classmethod

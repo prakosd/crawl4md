@@ -155,3 +155,15 @@ class TestSiteCrawler:
         assert results[0].success is True
         assert crawler.output_dir is not None
         assert (crawler.output_dir / "urls.txt").exists()
+
+    def test_stealth_enables_browser_and_run_flags(self):
+        """Stealth mode sets enable_stealth, simulate_user, override_navigator, magic."""
+        from crawl4ai import BrowserConfig, CrawlerRunConfig
+
+        config = CrawlerConfig(urls=["https://example.com"], stealth=True)
+        crawler = SiteCrawler(config)
+
+        run_cfg = crawler._build_run_config(CrawlerRunConfig)
+        assert run_cfg.simulate_user is True
+        assert run_cfg.override_navigator is True
+        assert run_cfg.magic is True

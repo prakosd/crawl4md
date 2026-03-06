@@ -74,7 +74,10 @@ class SiteCrawler:
     # ------------------------------------------------------------------
 
     async def _crawl_async(self) -> list[CrawlResult]:
-        browser_cfg = BrowserConfig(headless=True)
+        browser_cfg = BrowserConfig(
+            headless=True,
+            enable_stealth=self.config.stealth,
+        )
         run_cfg = self._build_run_config(CrawlerRunConfig)
 
         results: list[CrawlResult] = []
@@ -152,6 +155,11 @@ class SiteCrawler:
 
         if self.page_config.timeout:
             kwargs["page_timeout"] = self.page_config.timeout
+
+        if self.config.stealth:
+            kwargs["simulate_user"] = True
+            kwargs["override_navigator"] = True
+            kwargs["magic"] = True
 
         return run_config_cls(**kwargs)
 
