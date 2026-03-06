@@ -66,6 +66,31 @@ class TestSiteCrawler:
         # Fragment-only links are resolved to the base URL
         assert all(not link.endswith("#frag") for link in links)
 
+    def test_extract_links_skips_static_assets(self):
+        from crawl4md.config import CrawlResult
+
+        result = CrawlResult(
+            url="https://example.com",
+            html=(
+                '<a href="/page1">P1</a>'
+                '<a href="/style.css">CSS</a>'
+                '<a href="/favicon.ico">ICO</a>'
+                '<a href="/app.js">JS</a>'
+                '<a href="/image.png">PNG</a>'
+                '<a href="/font.woff2">WOFF2</a>'
+                '<a href="/doc.pdf">PDF</a>'
+            ),
+            success=True,
+        )
+        links = SiteCrawler._extract_links(result, "https://example.com")
+        assert "https://example.com/page1" in links
+        assert "https://example.com/style.css" not in links
+        assert "https://example.com/favicon.ico" not in links
+        assert "https://example.com/app.js" not in links
+        assert "https://example.com/image.png" not in links
+        assert "https://example.com/font.woff2" not in links
+        assert "https://example.com/doc.pdf" not in links
+
     def test_save_url_list(self, tmp_path: Path):
         from crawl4md.config import CrawlResult
 

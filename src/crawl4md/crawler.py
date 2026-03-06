@@ -78,7 +78,7 @@ class SiteCrawler:
 
         results: list[CrawlResult] = []
         visited: set[str] = set()
-        queue: list[tuple[str, int]] = [(url, 0) for url in self.config.urls]
+        queue: list[tuple[str, int]] = [(url, 1) for url in self.config.urls]
         progress = ProgressReporter(self.config.limit)
 
         async with AsyncWebCrawler(config=browser_cfg) as crawler:
@@ -152,10 +152,19 @@ class SiteCrawler:
             and any(re.search(p, url) for p in self.config.exclude_paths)
         )
 
+    # File extensions that are never useful pages to crawl
+    _STATIC_ASSET_EXTENSIONS = frozenset((
+        ".css", ".js", ".ico", ".png", ".jpg", ".jpeg", ".gif", ".svg",
+        ".webp", ".bmp", ".tiff", ".woff", ".woff2", ".ttf", ".eot",
+        ".otf", ".mp3", ".mp4", ".avi", ".mov", ".webm", ".ogg",
+        ".pdf", ".zip", ".gz", ".tar", ".rar", ".7z",
+        ".xml", ".json", ".rss", ".atom",
+    ))
+
     @staticmethod
     def _extract_links(result: CrawlResult, base_url: str) -> list[str]:
         """Extract absolute http(s) links from crawled HTML."""
-        from urllib.parse import urljoin
+        from urllib.parse import urljoin, urlparse
 
         links: list[str] = []
         for match in re.finditer(r'href=["\']([^"\']+)["\']', result.html):
@@ -164,6 +173,10 @@ class SiteCrawler:
             if absolute.startswith(("http://", "https://")):
                 # Strip fragments
                 absolute = absolute.split("#")[0]
+                # Skip static asset URLs
+                path = urlparse(absolute).path.lower()
+                if any(path.endswith(ext) for ext in SiteCrawler._STATIC_ASSET_EXTENSIONS):
+                    continue
                 if absolute not in links:
                     links.append(absolute)
         return links
