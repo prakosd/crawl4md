@@ -78,7 +78,14 @@ class SiteCrawler:
 
         results: list[CrawlResult] = []
         visited: set[str] = set()
-        queue: list[tuple[str, int]] = [(url, 1) for url in self.config.urls]
+        # Track every URL ever queued so we can cap at `limit`
+        generated: set[str] = set()
+        queue: list[tuple[str, int]] = []
+        for seed_url in self.config.urls:
+            if len(generated) >= self.config.limit:
+                break
+            generated.add(seed_url)
+            queue.append((seed_url, 1))
         progress = ProgressReporter(self.config.limit)
 
         async with AsyncWebCrawler(config=browser_cfg) as crawler:
@@ -118,7 +125,10 @@ class SiteCrawler:
                 if depth < self.config.max_depth and crawl_result.success:
                     new_links = self._extract_links(crawl_result, url)
                     for link in new_links:
-                        if link not in visited:
+                        if len(generated) >= self.config.limit:
+                            break
+                        if link not in generated:
+                            generated.add(link)
                             queue.append((link, depth + 1))
 
         assert self.output_dir is not None
