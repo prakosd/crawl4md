@@ -91,9 +91,9 @@ class TestFixMarkdownTables:
         )
         result = ContentExtractor._fix_markdown_tables(text)
         lines = result.split("\n")
-        assert lines[0] == "Col A | Col B | Col C |"
+        assert lines[0] == "| Col A | Col B | Col C |"
         assert lines[1] == "| --- | --- | --- |"
-        assert lines[2] == "val1 | val2 | val3 |"
+        assert lines[2] == "| val1 | val2 | val3 |"
 
     def test_preserves_existing_separator(self):
         text = (
@@ -102,7 +102,10 @@ class TestFixMarkdownTables:
             "| val1 | val2 |"
         )
         result = ContentExtractor._fix_markdown_tables(text)
-        assert result == text
+        lines = result.split("\n")
+        assert lines[0] == "| Col A | Col B |"
+        assert lines[1] == "| --- | --- |"
+        assert lines[2] == "| val1 | val2 |"
 
     def test_no_table_passes_through(self):
         text = "Just some text.\n\nNo tables here."
@@ -128,9 +131,9 @@ class TestFixMarkdownTables:
         )
         result = ContentExtractor._fix_markdown_tables(text)
         lines = result.split("\n")
-        assert lines[4] == "Header A | Header B |"
+        assert lines[4] == "| Header A | Header B |"
         assert lines[5] == "| --- | --- |"
-        assert lines[6] == "data1 | data2 |"
+        assert lines[6] == "| data1 | data2 |"
 
     def test_trafilatura_table_output(self):
         """Simulate the actual trafilatura output for the HomeHub+ pricing table."""
@@ -145,7 +148,15 @@ class TestFixMarkdownTables:
         )
         result = ContentExtractor._fix_markdown_tables(text)
         lines = result.split("\n")
+        # Header normalized with leading pipe
+        assert lines[2].startswith("| Ala Carte")
         # Separator should be inserted after header row
         assert "---" in lines[3]
-        # First data row should follow
+        # First data row should follow with consistent pipes
         assert "$30.56" in lines[4]
+        assert lines[4].startswith("|")
+        # Rows with || get expanded to empty cells and padded to 4 columns
+        assert lines[5].count("|") == lines[2].count("|")
+        # Short row padded
+        assert "Total monthly subscription" in lines[7]
+        assert lines[7].count("|") == lines[2].count("|")

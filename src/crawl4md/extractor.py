@@ -69,46 +69,76 @@ class ContentExtractor:
 
     @staticmethod
     def _fix_markdown_tables(text: str) -> str:
-        """Insert missing separator rows so pipe-delimited blocks become valid Markdown tables.
+        """Normalize pipe-delimited blocks into valid Markdown tables.
 
-        Trafilatura sometimes emits pipe-delimited rows without the
-        ``| --- | --- |`` separator after the header row.  This method
-        detects consecutive lines containing ``|`` and adds a separator
-        when one is missing.
+        Fixes common issues produced by HTML-to-Markdown converters when
+        the original HTML uses ``colspan`` / ``rowspan``:
+
+        * Missing ``| --- |`` separator after the header row.
+        * Inconsistent leading / trailing pipes.
+        * Double pipes (``||``) representing empty cells.
+        * Rows with fewer columns than the header (padded with empty cells).
         """
         pipe_line = re.compile(r"^\|?.+\|.+\|?\s*$")
-        separator_line = re.compile(r"^\|?(\s*-{3,}\s*\|)+\s*-{3,}\s*\|?\s*$")
 
         lines = text.split("\n")
         result: list[str] = []
         i = 0
         while i < len(lines):
             line = lines[i]
-            # Detect start of a table block (line with pipes)
             if pipe_line.match(line):
-                # Collect consecutive pipe lines
-                block_start = i
                 block: list[str] = []
                 while i < len(lines) and pipe_line.match(lines[i]):
                     block.append(lines[i])
                     i += 1
-
-                if len(block) >= 2 and not separator_line.match(block[1]):
-                    # Count columns from the header row
-                    header = block[0]
-                    # Split on | and count non-empty segments
-                    cols = [c for c in header.split("|") if c.strip()]
-                    n_cols = max(len(cols), 1)
-                    sep = "| " + " | ".join("---" for _ in range(n_cols)) + " |"
-                    result.append(block[0])
-                    result.append(sep)
-                    result.extend(block[1:])
-                else:
-                    result.extend(block)
+                result.extend(ContentExtractor._normalize_table_block(block))
             else:
                 result.append(line)
                 i += 1
         return "\n".join(result)
+
+    @staticmethod
+    def _normalize_table_block(block: list[str]) -> list[str]:
+        """Turn a block of pipe-delimited lines into a well-formed Markdown table."""
+        if len(block) < 2:
+            return block
+
+        separator_re = re.compile(r"^\|?(\s*-{3,}\s*\|)+\s*-{3,}\s*\|?\s*$")
+        has_separator = bool(separator_re.match(block[1]))
+
+        rows_to_parse = [block[0]] + block[2:] if has_separator else list(block)
+
+        parsed: list[list[str]] = []
+        for row in rows_to_parse:
+            expanded = row
+            while "||" in expanded:
+                expanded = expanded.replace("||", "| |")
+            expanded = expanded.strip()
+            if not expanded.startswith("|"):
+                expanded = "| " + expanded
+            if not expanded.endswith("|"):
+                expanded = expanded + " |"
+            cells = [c.strip() for c in expanded.split("|")]
+            if cells and cells[0] == "":
+                cells = cells[1:]
+            if cells and cells[-1] == "":
+                cells = cells[:-1]
+            parsed.append(cells)
+
+        max_cols = max(len(cells) for cells in parsed)
+        if max_cols < 1:
+            return block
+
+        for cells in parsed:
+            while len(cells) < max_cols:
+                cells.append("")
+
+        out: list[str] = []
+        for cells in parsed:
+            out.append("| " + " | ".join(cells) + " |")
+        sep_row = "| " + " | ".join("---" for _ in range(max_cols)) + " |"
+        out.insert(1, sep_row)
+        return out
 
     def _filter_tags(self, html: str) -> str:
         """Remove or keep only specified HTML tags using simple parsing."""
