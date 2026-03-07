@@ -7,7 +7,7 @@ from pathlib import Path
 
 from crawl4md.config import ExtractedPage
 
-_SEPARATOR = "\n\n" + "=" * 80 + "\n"
+_SEPARATOR = "\n\n---\n\n"
 _MB = 1024 * 1024
 
 
@@ -183,11 +183,15 @@ class FileWriter:
 
     @staticmethod
     def _format_page(page: ExtractedPage) -> str:
-        """Format a single page as a text block with URL header."""
-        header = f"URL: {page.url}"
+        """Format a single page as a Markdown block with metadata header."""
+        parts = [_SEPARATOR]
         if page.title:
-            header += f"\nTitle: {page.title}"
-        return f"{_SEPARATOR}{header}\n{_SEPARATOR}{page.markdown}\n"
+            parts.append(f"# {page.title}\n\n")
+        parts.append(f"*Source: {page.url}*\n")
+        parts.append(_SEPARATOR)
+        parts.append(page.markdown)
+        parts.append("\n")
+        return "".join(parts)
 
     @staticmethod
     def _write_to(output_dir: Path, index: int, chunks: list[str], ext: str = ".txt") -> Path:

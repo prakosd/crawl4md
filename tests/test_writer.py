@@ -27,15 +27,15 @@ class TestFileWriter:
         files = writer.write(sample_pages, tmp_path)
         content = files[0].read_text(encoding="utf-8")
 
-        assert "URL: https://example.com/page1" in content
-        assert "Title: Page One" in content
+        assert "*Source: https://example.com/page1*" in content
+        assert "# Page One" in content
 
     def test_file_contains_separators(self, tmp_path: Path, sample_pages):
         writer = FileWriter()
         files = writer.write(sample_pages, tmp_path)
         content = files[0].read_text(encoding="utf-8")
 
-        assert "=" * 80 in content
+        assert "\n---\n" in content
 
     def test_splits_at_size_limit(self, tmp_path: Path):
         """Produces multiple files when content exceeds max size."""
