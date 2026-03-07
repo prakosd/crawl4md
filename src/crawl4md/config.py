@@ -19,6 +19,7 @@ class CrawlerConfig(BaseModel):
     flush_interval: int = 10
     delay: float = 0
     stealth: bool = False
+    max_retries: int = 2
 
     @field_validator("urls", mode="before")
     @classmethod
@@ -68,6 +69,13 @@ class CrawlerConfig(BaseModel):
     def validate_delay(cls, v: float) -> float:
         if v < 0:
             raise ValueError("Delay must be non-negative.")
+        return v
+
+    @field_validator("max_retries")
+    @classmethod
+    def validate_max_retries(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("max_retries must be non-negative.")
         return v
 
 

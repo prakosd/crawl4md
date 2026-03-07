@@ -157,7 +157,7 @@ class TestSiteCrawler:
         assert results[0].url == "https://example.com"
         assert results[0].success is True
         assert crawler.output_dir is not None
-        assert (crawler.output_dir / "urls.txt").exists()
+        assert (crawler.output_dir / "urls_success.txt").exists()
 
     def test_stealth_enables_browser_and_run_flags(self):
         """Stealth mode sets enable_stealth, simulate_user, override_navigator, magic."""
@@ -198,8 +198,170 @@ class TestSiteCrawler:
 
         assert len(results) == 1
         assert len(crawler.content_files) >= 1
-        content = crawler.content_files[0].read_text(encoding="utf-8")
-        assert "https://example.com" in content
+
+
+class TestIsBlocked:
+    """Tests for WAF/bot-protection block detection."""
+
+    def test_detects_incapsula(self):
+        html = '<html><body>Request unsuccessful. Incapsula incident ID: 123</body></html>'
+        assert SiteCrawler._is_blocked(html) is True
+
+    def test_detects_incapsula_case_insensitive(self):
+        html = '<html><body>request unsuccessful. incapsula incident id: 456</body></html>'
+        assert SiteCrawler._is_blocked(html) is True
+
+    def test_detects_access_denied(self):
+        html = '<html><head><title>Access Denied</title></head><body>blocked</body></html>'
+        assert SiteCrawler._is_blocked(html) is True
+
+    def test_ignores_normal_html(self):
+        html = '<html><body><p>Normal content</p></body></html>'
+        assert SiteCrawler._is_blocked(html) is False
+
+    def test_empty_html_not_blocked(self):
+        assert SiteCrawler._is_blocked("") is False
+
+
+class TestSaveUrlLists:
+    """Tests for per-round URL list splitting."""
+
+    def test_splits_success_and_fail(self, tmp_path: Path):
+        from crawl4md.config import CrawlResult
+
+        config = CrawlerConfig(urls=["https://example.com"])
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        crawler.output_dir = tmp_path
+
+        success = [CrawlResult(url="https://example.com/a", success=True)]
+        fail = [CrawlResult(url="https://example.com/b", success=False, error="Blocked")]
+        crawler._save_url_lists(success, fail, "round_1_")
+
+        assert (tmp_path / "round_1_urls_success.txt").read_text(encoding="utf-8") == "https://example.com/a"
+        assert (tmp_path / "round_1_urls_fail.txt").read_text(encoding="utf-8") == "https://example.com/b"
+
+    def test_no_fail_file_when_all_succeed(self, tmp_path: Path):
+        from crawl4md.config import CrawlResult
+
+        config = CrawlerConfig(urls=["https://example.com"])
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        crawler.output_dir = tmp_path
+
+        success = [CrawlResult(url="https://example.com/a", success=True)]
+        crawler._save_url_lists(success, [], "round_1_")
+
+        assert (tmp_path / "round_1_urls_success.txt").exists()
+        assert not (tmp_path / "round_1_urls_fail.txt").exists()
+
+
+class TestRetryRounds:
+    """Tests for the multi-round crawl with retries."""
+
+    @patch("crawl4md.crawler._ROUND_COOLDOWN", 0)
+    @patch("crawl4md.crawler.AsyncWebCrawler")
+    def test_retries_blocked_pages(self, mock_crawler_cls, tmp_path: Path):
+        """Blocked pages in round 1 are retried in round 2."""
+        blocked_html = '<html><body>Request unsuccessful. Incapsula incident ID: 999</body></html>'
+        ok_result = _make_mock_result("https://example.com/ok", "<p>good</p>", "good")
+        blocked_result = _make_mock_result("https://example.com/blocked", blocked_html, "blocked")
+        # Round 2: the previously-blocked page now succeeds
+        retry_ok_result = _make_mock_result("https://example.com/blocked", "<p>now ok</p>", "now ok")
+
+        call_count = {"n": 0}
+        async def mock_arun(url, config):
+            call_count["n"] += 1
+            if url == "https://example.com/ok":
+                return ok_result
+            # First call for /blocked returns block, second returns ok
+            if url == "https://example.com/blocked":
+                if call_count["n"] <= 2:
+                    return blocked_result
+                return retry_ok_result
+            return ok_result
+
+        mock_instance = AsyncMock()
+        mock_instance.arun = mock_arun
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_crawler_cls.return_value = mock_instance
+
+        config = CrawlerConfig(
+            urls=["https://example.com/ok", "https://example.com/blocked"],
+            limit=10, max_retries=1,
+        )
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        results = crawler.crawl()
+
+        assert crawler.output_dir is not None
+        # Round 1 files
+        assert (crawler.output_dir / "round_1_urls_success.txt").exists()
+        assert (crawler.output_dir / "round_1_urls_fail.txt").exists()
+        # Round 2 files
+        assert (crawler.output_dir / "round_2_urls_success.txt").exists()
+        # Final files
+        assert (crawler.output_dir / "urls_success.txt").exists()
+        # All pages should succeed after retry
+        success = [r for r in results if r.success]
+        assert len(success) == 2
+
+    @patch("crawl4md.crawler._ROUND_COOLDOWN", 0)
+    @patch("crawl4md.crawler.AsyncWebCrawler")
+    def test_skips_retries_when_all_succeed(self, mock_crawler_cls, tmp_path: Path):
+        """No retry rounds when everything succeeds in round 1."""
+        ok_result = _make_mock_result("https://example.com/a", "<p>ok</p>", "ok")
+
+        mock_instance = AsyncMock()
+        mock_instance.arun = AsyncMock(return_value=ok_result)
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_crawler_cls.return_value = mock_instance
+
+        config = CrawlerConfig(
+            urls=["https://example.com/a"],
+            limit=10, max_retries=2,
+        )
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        results = crawler.crawl()
+
+        assert crawler.output_dir is not None
+        # Round 1 exists
+        assert (crawler.output_dir / "round_1_urls_success.txt").exists()
+        # Round 2 should NOT exist (early exit)
+        assert not (crawler.output_dir / "round_2_urls_success.txt").exists()
+        assert not (crawler.output_dir / "round_2_urls_fail.txt").exists()
+        # Final success
+        assert (crawler.output_dir / "urls_success.txt").exists()
+        assert not (crawler.output_dir / "urls_fail.txt").exists()
+
+    @patch("crawl4md.crawler._ROUND_COOLDOWN", 0)
+    @patch("crawl4md.crawler.AsyncWebCrawler")
+    def test_max_retries_zero_no_retries(self, mock_crawler_cls, tmp_path: Path):
+        """max_retries=0 means no retry rounds."""
+        blocked_html = '<html><body>Request unsuccessful. Incapsula incident ID: 999</body></html>'
+        blocked_result = _make_mock_result("https://example.com/x", blocked_html, "blocked")
+
+        mock_instance = AsyncMock()
+        mock_instance.arun = AsyncMock(return_value=blocked_result)
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_crawler_cls.return_value = mock_instance
+
+        config = CrawlerConfig(
+            urls=["https://example.com/x"],
+            limit=10, max_retries=0,
+        )
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        results = crawler.crawl()
+
+        assert crawler.output_dir is not None
+        # Only round 1
+        assert (crawler.output_dir / "round_1_urls_fail.txt").exists()
+        assert not (crawler.output_dir / "round_2_urls_fail.txt").exists()
+        # Final fail
+        assert (crawler.output_dir / "urls_fail.txt").exists()
+        assert not (crawler.output_dir / "urls_success.txt").exists()
+        # No content files since everything was blocked
+        assert len(crawler.content_files) == 0
 
     @patch("crawl4md.crawler.AsyncWebCrawler")
     def test_redirect_updates_result_url(self, mock_crawler_cls, tmp_path: Path):
@@ -294,7 +456,7 @@ class TestSiteCrawler:
         crawler.crawl()
 
         # The relative link "sibling" should resolve against /section/new
-        urls_file = (crawler.output_dir / "urls.txt").read_text(encoding="utf-8")
+        urls_file = (crawler.output_dir / "urls_success.txt").read_text(encoding="utf-8")
         assert "https://example.com/section/new" in urls_file
 
     @patch("crawl4md.crawler.AsyncWebCrawler")

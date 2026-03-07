@@ -38,11 +38,13 @@ class FileWriter:
         output_dir: Path | str | None = None,
         max_file_size_mb: float = 15.0,
         file_extension: str = ".txt",
+        prefix: str = "",
     ) -> None:
         self._output_dir = Path(output_dir) if output_dir else None
         self._max_bytes = int(max_file_size_mb * _MB)
         self._max_file_size_mb = max_file_size_mb
         self._file_extension = file_extension
+        self._prefix = prefix
         self._file_index = 1
         self._current_chunks: list[str] = []
         self._current_size = 0
@@ -95,6 +97,15 @@ class FileWriter:
         """Flush the in-memory buffer to disk and return all files created."""
         self._flush_buffer()
         return list(self._files)
+
+    def reset(self, prefix: str = "") -> None:
+        """Reset the writer for a new round with a different file prefix."""
+        self._prefix = prefix
+        self._file_index = 1
+        self._current_chunks = []
+        self._current_size = 0
+        self._bytes_on_disk = 0
+        self._files = []
 
     # ------------------------------------------------------------------
     # Batch API (backward-compatible)
@@ -163,7 +174,7 @@ class FileWriter:
             return
         assert self._output_dir is not None
         self._output_dir.mkdir(parents=True, exist_ok=True)
-        path = self._output_dir / f"content_{self._file_index:03d}{self._file_extension}"
+        path = self._output_dir / f"{self._prefix}content_{self._file_index:03d}{self._file_extension}"
         with path.open("a", encoding="utf-8") as fh:
             fh.write("".join(self._current_chunks))
         if path not in self._files:
@@ -176,7 +187,7 @@ class FileWriter:
         """Write chunks to the current file index (used for oversized pages)."""
         assert self._output_dir is not None
         self._output_dir.mkdir(parents=True, exist_ok=True)
-        path = self._output_dir / f"content_{self._file_index:03d}{self._file_extension}"
+        path = self._output_dir / f"{self._prefix}content_{self._file_index:03d}{self._file_extension}"
         path.write_text("".join(chunks), encoding="utf-8")
         if path not in self._files:
             self._files.append(path)

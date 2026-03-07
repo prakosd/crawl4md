@@ -63,6 +63,18 @@ class TestCrawlerConfig:
         )
         assert cfg.include_only_paths == [r"/blog/.*"]
 
+    def test_max_retries_default(self):
+        cfg = CrawlerConfig(urls=["https://example.com"])
+        assert cfg.max_retries == 2
+
+    def test_max_retries_zero_allowed(self):
+        cfg = CrawlerConfig(urls=["https://example.com"], max_retries=0)
+        assert cfg.max_retries == 0
+
+    def test_max_retries_negative_rejected(self):
+        with pytest.raises(ValueError, match="non-negative"):
+            CrawlerConfig(urls=["https://example.com"], max_retries=-1)
+
 
 class TestPageConfig:
     def test_defaults(self):

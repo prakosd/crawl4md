@@ -6,6 +6,7 @@ import asyncio
 import concurrent.futures
 import random
 import re
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +21,18 @@ from crawl4md.writer import FileWriter
 
 # Allow asyncio.run() inside Jupyter's already-running event loop
 nest_asyncio.apply()
+
+# Seconds to pause between retry rounds so the WAF can cool down
+_ROUND_COOLDOWN = 30
+
+# Known WAF / bot-protection block signatures (matched case-insensitively)
+_BLOCK_SIGNATURES = (
+    "incapsula incident id",
+    "access denied</title>",
+    "attention required! | cloudflare",
+    "please turn javascript on and reload the page",
+    "checking your browser before accessing",
+)
 
 
 class SiteCrawler:
@@ -54,57 +67,136 @@ class SiteCrawler:
     def crawl(self) -> list[CrawlResult]:
         """Crawl the configured URLs and return results.
 
-        Creates a timestamped output folder and writes a ``urls.txt``
-        file listing every crawled URL.
+        Creates a timestamped output folder.  Runs multiple rounds:
+        round 1 crawls seed URLs; subsequent rounds retry blocked/failed
+        URLs up to ``max_retries`` times.  Each round writes per-round
+        files (``round_N_*``).  After all rounds, final merged files
+        are produced (``content_*.ext``, ``urls_success.txt``,
+        ``urls_fail.txt``).
         """
         self.output_dir = self._create_output_dir()
         # Attach output_dir to writer so incremental flushes land there
         if self._writer is not None:
             self._writer._output_dir = self.output_dir
         if sys.platform == "win32":
-            # Windows Jupyter uses SelectorEventLoop which doesn't support
-            # subprocesses needed by Playwright. Run in a ProactorEventLoop
-            # on a separate thread.
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                results = pool.submit(self._crawl_in_proactor_loop).result()
+                all_results = pool.submit(self._run_rounds_in_proactor_loop).result()
         else:
-            results = asyncio.run(self._crawl_async())
-        self._save_url_list(results)
-        # Flush any remaining content and record written files
-        if self._writer is not None:
-            self.content_files = self._writer.flush()
-        return results
+            all_results = asyncio.run(self._run_rounds_async())
+        return all_results
 
-    def _crawl_in_proactor_loop(self) -> list[CrawlResult]:
+    def _run_rounds_in_proactor_loop(self) -> list[CrawlResult]:
         loop = asyncio.ProactorEventLoop()
         asyncio.set_event_loop(loop)
         try:
-            return loop.run_until_complete(self._crawl_async())
+            return loop.run_until_complete(self._run_rounds_async())
         finally:
             loop.close()
 
     # ------------------------------------------------------------------
-    # Internals
+    # Round orchestration
     # ------------------------------------------------------------------
 
-    async def _crawl_async(self) -> list[CrawlResult]:
+    async def _run_rounds_async(self) -> list[CrawlResult]:
+        """Run the initial crawl + retry rounds, producing per-round and final files."""
+        all_success: list[CrawlResult] = []
+        all_content_files: list[Path] = []
+        total_rounds = 1 + self.config.max_retries  # round 1 + retries
+
         browser_cfg = BrowserConfig(
             headless=True,
             enable_stealth=self.config.stealth,
         )
         run_cfg = self._build_run_config(CrawlerRunConfig)
 
+        # --- Round 1: full crawl with link discovery ---
+        round_prefix = "round_1_"
+        if self._writer is not None:
+            self._writer.reset(round_prefix)
+        print(f"--- Round 1/{total_rounds}: Crawling {len(self.config.urls)} seed URL(s) ---")
+        round_results = await self._crawl_urls_async(
+            urls=self.config.urls,
+            browser_cfg=browser_cfg,
+            run_cfg=run_cfg,
+            discover_links=True,
+        )
+        success, fail = self._split_results(round_results)
+        self._save_url_lists(success, fail, round_prefix)
+        if self._writer is not None:
+            round_files = self._writer.flush()
+            all_content_files.extend(round_files)
+        all_success.extend(success)
+
+        # --- Retry rounds ---
+        failed_urls = [r.url for r in fail]
+        for retry_num in range(1, self.config.max_retries + 1):
+            if not failed_urls:
+                print(f"\nAll pages succeeded — skipping remaining retries.")
+                break
+
+            round_num = retry_num + 1
+            round_prefix = f"round_{round_num}_"
+            if self._writer is not None:
+                self._writer.reset(round_prefix)
+
+            print(f"\n--- Round {round_num}/{total_rounds}: Retrying {len(failed_urls)} failed URL(s) (waiting {_ROUND_COOLDOWN}s cooldown) ---")
+            await asyncio.sleep(_ROUND_COOLDOWN)
+
+            round_results = await self._crawl_urls_async(
+                urls=failed_urls,
+                browser_cfg=browser_cfg,
+                run_cfg=run_cfg,
+                discover_links=False,
+            )
+            success, fail = self._split_results(round_results)
+            self._save_url_lists(success, fail, round_prefix)
+            if self._writer is not None:
+                round_files = self._writer.flush()
+                all_content_files.extend(round_files)
+            all_success.extend(success)
+            failed_urls = [r.url for r in fail]
+
+        # --- Final merged files ---
+        self._write_final_files(all_success, failed_urls, all_content_files)
+        self.content_files = self._get_final_content_files()
+
+        total_crawled = len(all_success) + len(failed_urls)
+        print(f"\nDone! {len(all_success)} succeeded, {len(failed_urls)} failed out of {total_crawled} total.")
+        assert self.output_dir is not None
+        print(f"Output folder: {self.output_dir}")
+
+        # Return all results (success + remaining failures) for API consumers
+        remaining_fail = [CrawlResult(url=u, success=False, error="Blocked by WAF") for u in failed_urls]
+        return all_success + remaining_fail
+
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
+
+    async def _crawl_urls_async(
+        self,
+        urls: list[str],
+        browser_cfg: BrowserConfig,
+        run_cfg: object,
+        *,
+        discover_links: bool = True,
+    ) -> list[CrawlResult]:
+        """Crawl a list of URLs and return per-page results.
+
+        When *discover_links* is True (round 1), follow links up to
+        ``max_depth``.  When False (retry rounds), only crawl the
+        given URLs with no link discovery.
+        """
         results: list[CrawlResult] = []
         visited: set[str] = set()
-        # Track every URL ever queued so we can cap at `limit`
         generated: set[str] = set()
         queue: list[tuple[str, int]] = []
-        for seed_url in self.config.urls:
+        for seed_url in urls:
             if len(generated) >= self.config.limit:
                 break
             generated.add(seed_url)
             queue.append((seed_url, 1))
-        progress = ProgressReporter(self.config.limit)
+        progress = ProgressReporter(min(len(urls), self.config.limit))
 
         async with AsyncWebCrawler(config=browser_cfg) as crawler:
             while queue and len(results) < self.config.limit:
@@ -124,15 +216,12 @@ class SiteCrawler:
                     final_url = getattr(result, "redirected_url", None) or url
                     redirected = final_url != url
 
-                    # Deduplicate: skip if the redirect target was already visited
                     if redirected and final_url in visited:
                         continue
 
-                    # Mark the final URL as visited so future duplicates are skipped
                     visited.add(final_url)
                     generated.add(final_url)
 
-                    # Filter the final URL against include/exclude rules
                     if redirected and not self._url_allowed(final_url):
                         continue
 
@@ -153,6 +242,12 @@ class SiteCrawler:
                         error=str(exc),
                     )
 
+                # Detect WAF blocks (Incapsula etc. return HTTP 200 with block HTML)
+                if crawl_result.success and self._is_blocked(crawl_result.html):
+                    crawl_result.success = False
+                    crawl_result.error = "Blocked by WAF"
+                    crawl_result.markdown = ""
+
                 results.append(crawl_result)
                 progress.update(crawl_result.url)
 
@@ -162,19 +257,18 @@ class SiteCrawler:
                     if page.markdown.strip():
                         self._writer.add(page)
 
-                # Flush urls.txt and content files periodically
+                # Flush content files periodically
                 if len(results) % self.config.flush_interval == 0:
-                    self._save_url_list(results)
                     if self._writer is not None:
                         self._writer.flush()
 
-                # Throttle between pages to avoid triggering bot detection
+                # Throttle between pages — wide jitter mimics human browsing
                 if self.config.delay > 0:
-                    jitter = self.config.delay * random.uniform(0.5, 1.5)
+                    jitter = self.config.delay * random.uniform(0.3, 3.0)
                     await asyncio.sleep(jitter)
 
-                # Discover links for deeper crawling
-                if depth < self.config.max_depth and crawl_result.success:
+                # Discover links for deeper crawling (only in round 1)
+                if discover_links and depth < self.config.max_depth and crawl_result.success:
                     new_links = self._extract_links(crawl_result, crawl_result.url)
                     for link in new_links:
                         if len(generated) >= self.config.limit:
@@ -183,9 +277,83 @@ class SiteCrawler:
                             generated.add(link)
                             queue.append((link, depth + 1))
 
-        assert self.output_dir is not None
-        progress.finish(str(self.output_dir))
         return results
+
+    # ------------------------------------------------------------------
+    # Block detection
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_blocked(html: str) -> bool:
+        """Return True if the HTML looks like a WAF/bot-protection block page."""
+        if not html:
+            return False
+        html_lower = html.lower()
+        return any(sig in html_lower for sig in _BLOCK_SIGNATURES)
+
+    # ------------------------------------------------------------------
+    # Result helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _split_results(results: list[CrawlResult]) -> tuple[list[CrawlResult], list[CrawlResult]]:
+        """Split results into (success, fail) lists."""
+        success = [r for r in results if r.success]
+        fail = [r for r in results if not r.success]
+        return success, fail
+
+    def _save_url_lists(
+        self,
+        success: list[CrawlResult],
+        fail: list[CrawlResult],
+        prefix: str = "",
+    ) -> None:
+        """Write per-round success and fail URL lists."""
+        assert self.output_dir is not None
+        if success:
+            path = self.output_dir / f"{prefix}urls_success.txt"
+            path.write_text("\n".join(r.url for r in success), encoding="utf-8")
+        if fail:
+            path = self.output_dir / f"{prefix}urls_fail.txt"
+            path.write_text("\n".join(r.url for r in fail), encoding="utf-8")
+
+    def _write_final_files(
+        self,
+        all_success: list[CrawlResult],
+        remaining_fail_urls: list[str],
+        all_content_files: list[Path],
+    ) -> None:
+        """Produce final merged output files."""
+        assert self.output_dir is not None
+
+        # urls_success.txt — all successful URLs across all rounds
+        if all_success:
+            path = self.output_dir / "urls_success.txt"
+            path.write_text("\n".join(r.url for r in all_success), encoding="utf-8")
+
+        # urls_fail.txt — URLs that still failed after all retries
+        if remaining_fail_urls:
+            path = self.output_dir / "urls_fail.txt"
+            path.write_text("\n".join(remaining_fail_urls), encoding="utf-8")
+
+        # Merge all per-round content files into final content_001.ext, content_002.ext, ...
+        if all_content_files:
+            ext = self.page_config.output_extension
+            final_index = 1
+            for src in all_content_files:
+                dst = self.output_dir / f"content_{final_index:03d}{ext}"
+                shutil.copy2(src, dst)
+                final_index += 1
+
+    def _get_final_content_files(self) -> list[Path]:
+        """Return sorted list of final (unprefixed) content files."""
+        assert self.output_dir is not None
+        pattern = f"content_*{self.page_config.output_extension}"
+        files = [
+            f for f in sorted(self.output_dir.glob(pattern))
+            if not f.name.startswith("round_")
+        ]
+        return files
 
     def _build_run_config(self, run_config_cls: type) -> object:
         """Map PageConfig to a Crawl4AI CrawlerRunConfig."""
@@ -303,7 +471,7 @@ class SiteCrawler:
         return output_dir
 
     def _save_url_list(self, results: list[CrawlResult]) -> None:
-        """Write urls.txt with one URL per line."""
+        """Write urls.txt with one URL per line (legacy, kept for compatibility)."""
         assert self.output_dir is not None
         urls_file = self.output_dir / "urls.txt"
         lines = [r.url for r in results]

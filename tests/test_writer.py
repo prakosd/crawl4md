@@ -211,3 +211,53 @@ class TestFileWriterIncremental:
         files = writer.flush()
         assert out.exists()
         assert len(files) == 1
+
+
+class TestFileWriterPrefix:
+    """Tests for the prefix and reset() API."""
+
+    def test_prefix_in_filename(self, tmp_path: Path):
+        writer = FileWriter(output_dir=tmp_path, max_file_size_mb=15.0, prefix="round_1_")
+        page = ExtractedPage(url="https://example.com/a", markdown="content")
+        writer.add(page)
+        files = writer.flush()
+
+        assert len(files) == 1
+        assert files[0].name == "round_1_content_001.txt"
+
+    def test_reset_changes_prefix(self, tmp_path: Path):
+        writer = FileWriter(output_dir=tmp_path, max_file_size_mb=15.0, prefix="round_1_")
+        page1 = ExtractedPage(url="https://example.com/a", markdown="first")
+        writer.add(page1)
+        files1 = writer.flush()
+
+        writer.reset("round_2_")
+        page2 = ExtractedPage(url="https://example.com/b", markdown="second")
+        writer.add(page2)
+        files2 = writer.flush()
+
+        assert files1[0].name == "round_1_content_001.txt"
+        assert files2[0].name == "round_2_content_001.txt"
+
+    def test_reset_clears_state(self, tmp_path: Path):
+        writer = FileWriter(output_dir=tmp_path, max_file_size_mb=15.0, prefix="round_1_")
+        page = ExtractedPage(url="https://example.com/a", markdown="x" * 500)
+        writer.add(page)
+        writer.flush()
+
+        writer.reset("round_2_")
+        # After reset, file index should restart at 1
+        page2 = ExtractedPage(url="https://example.com/b", markdown="y" * 500)
+        writer.add(page2)
+        files = writer.flush()
+
+        assert len(files) == 1
+        assert files[0].name == "round_2_content_001.txt"
+
+    def test_default_prefix_is_empty(self, tmp_path: Path):
+        writer = FileWriter(output_dir=tmp_path, max_file_size_mb=15.0)
+        page = ExtractedPage(url="https://example.com/a", markdown="content")
+        writer.add(page)
+        files = writer.flush()
+
+        assert files[0].name == "content_001.txt"
