@@ -78,6 +78,17 @@ class TestFileWriter:
         assert all(f.name.startswith("content_") for f in files)
         assert all(f.suffix == ".txt" for f in files)
 
+    def test_md_extension_batch(self, tmp_path: Path, sample_pages):
+        writer = FileWriter(file_extension=".md")
+        files = writer.write(sample_pages, tmp_path)
+        assert all(f.suffix == ".md" for f in files)
+        assert files[0].name == "content_001.md"
+
+    def test_write_override_extension(self, tmp_path: Path, sample_pages):
+        writer = FileWriter(file_extension=".txt")
+        files = writer.write(sample_pages, tmp_path, file_extension=".md")
+        assert all(f.suffix == ".md" for f in files)
+
     def test_empty_pages_produces_no_files(self, tmp_path: Path):
         writer = FileWriter()
         files = writer.write([], tmp_path)
@@ -105,6 +116,16 @@ class TestFileWriterIncremental:
         content = files[0].read_text(encoding="utf-8")
         assert "https://example.com/page1" in content
         assert "https://example.com/page3" in content
+
+    def test_add_and_flush_md_extension(self, tmp_path: Path, sample_pages):
+        writer = FileWriter(output_dir=tmp_path, max_file_size_mb=15.0, file_extension=".md")
+        for page in sample_pages:
+            writer.add(page)
+        files = writer.flush()
+
+        assert len(files) == 1
+        assert files[0].name == "content_001.md"
+        assert files[0].suffix == ".md"
 
     def test_multiple_flushes_append_to_same_file(self, tmp_path: Path):
         """Consecutive flushes write to the same file until size limit."""

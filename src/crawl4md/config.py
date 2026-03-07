@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, field_validator, model_validator
 
@@ -80,6 +80,7 @@ class PageConfig(BaseModel):
     timeout: int = 30000
     max_file_size_mb: float = 15.0
     extract_main_content: bool = True
+    output_extension: Literal[".txt", ".md"] = ".txt"
 
     @field_validator("exclude_tags", "include_only_tags", mode="before")
     @classmethod

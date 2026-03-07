@@ -94,3 +94,15 @@ class TestPageConfig:
     def test_zero_file_size_rejected(self):
         with pytest.raises(ValueError, match="positive"):
             PageConfig(max_file_size_mb=0)
+
+    def test_output_extension_default(self):
+        cfg = PageConfig()
+        assert cfg.output_extension == ".txt"
+
+    def test_output_extension_md(self):
+        cfg = PageConfig(output_extension=".md")
+        assert cfg.output_extension == ".md"
+
+    def test_output_extension_invalid_rejected(self):
+        with pytest.raises(ValueError):
+            PageConfig(output_extension=".html")

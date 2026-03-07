@@ -1,4 +1,4 @@
-"""FileWriter — combines extracted pages into size-limited .txt files."""
+"""FileWriter — combines extracted pages into size-limited output files."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ _MB = 1024 * 1024
 
 
 class FileWriter:
-    """Writes extracted Markdown content to numbered .txt files.
+    """Writes extracted Markdown content to numbered output files.
 
     Each page is preceded by a URL header and separator.  Files are split
     when adding another page would exceed ``max_file_size_mb``.  A single
@@ -37,10 +37,12 @@ class FileWriter:
         self,
         output_dir: Path | str | None = None,
         max_file_size_mb: float = 15.0,
+        file_extension: str = ".txt",
     ) -> None:
         self._output_dir = Path(output_dir) if output_dir else None
         self._max_bytes = int(max_file_size_mb * _MB)
         self._max_file_size_mb = max_file_size_mb
+        self._file_extension = file_extension
         self._file_index = 1
         self._current_chunks: list[str] = []
         self._current_size = 0
@@ -103,10 +105,12 @@ class FileWriter:
         pages: list[ExtractedPage],
         output_dir: Path | str,
         max_file_size_mb: float = 15.0,
+        file_extension: str | None = None,
     ) -> list[Path]:
         """Write pages to numbered text files and return created paths."""
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
+        ext = file_extension if file_extension is not None else self._file_extension
 
         max_bytes = int(max_file_size_mb * _MB)
         files: list[Path] = []
@@ -126,17 +130,17 @@ class FileWriter:
                 )
                 # Flush current buffer first
                 if current_chunks:
-                    files.append(self._write_to(output_dir, file_index, current_chunks))
+                    files.append(self._write_to(output_dir, file_index, current_chunks, ext))
                     file_index += 1
                     current_chunks = []
                     current_size = 0
                 # Write oversized page alone
-                files.append(self._write_to(output_dir, file_index, [block]))
+                files.append(self._write_to(output_dir, file_index, [block], ext))
                 file_index += 1
                 continue
 
             if current_size + block_size > max_bytes and current_chunks:
-                files.append(self._write_to(output_dir, file_index, current_chunks))
+                files.append(self._write_to(output_dir, file_index, current_chunks, ext))
                 file_index += 1
                 current_chunks = []
                 current_size = 0
@@ -145,7 +149,7 @@ class FileWriter:
             current_size += block_size
 
         if current_chunks:
-            files.append(self._write_to(output_dir, file_index, current_chunks))
+            files.append(self._write_to(output_dir, file_index, current_chunks, ext))
 
         return files
 
@@ -159,7 +163,7 @@ class FileWriter:
             return
         assert self._output_dir is not None
         self._output_dir.mkdir(parents=True, exist_ok=True)
-        path = self._output_dir / f"content_{self._file_index:03d}.txt"
+        path = self._output_dir / f"content_{self._file_index:03d}{self._file_extension}"
         with path.open("a", encoding="utf-8") as fh:
             fh.write("".join(self._current_chunks))
         if path not in self._files:
@@ -172,7 +176,7 @@ class FileWriter:
         """Write chunks to the current file index (used for oversized pages)."""
         assert self._output_dir is not None
         self._output_dir.mkdir(parents=True, exist_ok=True)
-        path = self._output_dir / f"content_{self._file_index:03d}.txt"
+        path = self._output_dir / f"content_{self._file_index:03d}{self._file_extension}"
         path.write_text("".join(chunks), encoding="utf-8")
         if path not in self._files:
             self._files.append(path)
@@ -186,9 +190,9 @@ class FileWriter:
         return f"{_SEPARATOR}{header}\n{_SEPARATOR}{page.markdown}\n"
 
     @staticmethod
-    def _write_to(output_dir: Path, index: int, chunks: list[str]) -> Path:
-        """Write chunks to a numbered .txt file (batch mode helper)."""
-        filename = f"content_{index:03d}.txt"
+    def _write_to(output_dir: Path, index: int, chunks: list[str], ext: str = ".txt") -> Path:
+        """Write chunks to a numbered output file (batch mode helper)."""
+        filename = f"content_{index:03d}{ext}"
         path = output_dir / filename
         path.write_text("".join(chunks), encoding="utf-8")
         return path
