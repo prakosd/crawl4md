@@ -222,6 +222,52 @@ class TestIsBlocked:
     def test_empty_html_not_blocked(self):
         assert SiteCrawler._is_blocked("") is False
 
+    @patch("crawl4md.crawler.AsyncWebCrawler")
+    def test_waf_signature_with_real_content_not_blocked(self, mock_crawler_cls, tmp_path: Path):
+        """A page that contains a WAF signature but also substantial markdown is not flagged."""
+        html = (
+            '<html><head><title>Plans</title></head>'
+            '<body><noscript>Please turn JavaScript on and reload the page</noscript>'
+            '<p>' + 'Real content. ' * 100 + '</p></body></html>'
+        )
+        long_markdown = 'Real content. ' * 100
+        mock_result = _make_mock_result("https://example.com", html, long_markdown)
+
+        mock_instance = AsyncMock()
+        mock_instance.arun = AsyncMock(return_value=mock_result)
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_crawler_cls.return_value = mock_instance
+
+        config = CrawlerConfig(urls=["https://example.com"], limit=1)
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        results = crawler.crawl()
+
+        assert results[0].success is True
+        assert results[0].error is None
+
+    @patch("crawl4md.crawler.AsyncWebCrawler")
+    def test_waf_signature_with_short_content_is_blocked(self, mock_crawler_cls, tmp_path: Path):
+        """A page that contains a WAF signature and only short markdown is flagged as blocked."""
+        html = (
+            '<html><head><title>Access Denied</title></head>'
+            '<body>Please turn JavaScript on and reload the page</body></html>'
+        )
+        mock_result = _make_mock_result("https://example.com", html, "Access Denied")
+
+        mock_instance = AsyncMock()
+        mock_instance.arun = AsyncMock(return_value=mock_result)
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_crawler_cls.return_value = mock_instance
+
+        config = CrawlerConfig(urls=["https://example.com"], limit=1)
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        results = crawler.crawl()
+
+        assert results[0].success is False
+        assert results[0].error == "Blocked by WAF"
+
 
 class TestSaveUrlLists:
     """Tests for per-round URL list splitting."""

@@ -35,6 +35,11 @@ _BLOCK_SIGNATURES = (
     "javascript is required",
 )
 
+# If the extracted markdown exceeds this length (in characters), the page
+# contains real content and should not be classified as a WAF block even
+# when a block signature is present in the raw HTML.
+_BLOCK_MAX_CONTENT_LENGTH = 500
+
 
 class SiteCrawler:
     """Crawls websites and collects HTML/Markdown content.
@@ -280,9 +285,15 @@ class SiteCrawler:
                         error=str(exc),
                     )
 
-                # Detect WAF blocks (Incapsula etc. return HTTP 200 with block HTML)
+                # Detect WAF blocks (Incapsula etc. return HTTP 200 with block HTML).
+                # Only flag as blocked when the extracted markdown is short —
+                # pages with substantial content are not mere challenge pages.
                 raw_markdown = crawl_result.markdown
-                if crawl_result.success and self._is_blocked(crawl_result.html):
+                if (
+                    crawl_result.success
+                    and self._is_blocked(crawl_result.html)
+                    and len(raw_markdown.strip()) < _BLOCK_MAX_CONTENT_LENGTH
+                ):
                     crawl_result.success = False
                     crawl_result.error = "Blocked by WAF"
                     crawl_result.markdown = ""
