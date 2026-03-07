@@ -78,3 +78,74 @@ class TestContentExtractor:
         extractor = ContentExtractor(config)
         pages = extractor.extract(results)
         assert len(pages) == 3
+
+
+class TestFixMarkdownTables:
+    """Tests for the _fix_markdown_tables post-processing."""
+
+    def test_inserts_separator_when_missing(self):
+        text = (
+            "Col A | Col B | Col C |\n"
+            "val1 | val2 | val3 |\n"
+            "val4 | val5 | val6 |"
+        )
+        result = ContentExtractor._fix_markdown_tables(text)
+        lines = result.split("\n")
+        assert lines[0] == "Col A | Col B | Col C |"
+        assert lines[1] == "| --- | --- | --- |"
+        assert lines[2] == "val1 | val2 | val3 |"
+
+    def test_preserves_existing_separator(self):
+        text = (
+            "| Col A | Col B |\n"
+            "|---|---|\n"
+            "| val1 | val2 |"
+        )
+        result = ContentExtractor._fix_markdown_tables(text)
+        assert result == text
+
+    def test_no_table_passes_through(self):
+        text = "Just some text.\n\nNo tables here."
+        result = ContentExtractor._fix_markdown_tables(text)
+        assert result == text
+
+    def test_single_row_table_no_separator_added(self):
+        text = "Only | one | row |"
+        result = ContentExtractor._fix_markdown_tables(text)
+        # A single row doesn't need a separator (no data rows follow)
+        assert "---" not in result
+
+    def test_mixed_content_with_table(self):
+        text = (
+            "# Heading\n"
+            "\n"
+            "Some text.\n"
+            "\n"
+            "Header A | Header B |\n"
+            "data1 | data2 |\n"
+            "\n"
+            "More text."
+        )
+        result = ContentExtractor._fix_markdown_tables(text)
+        lines = result.split("\n")
+        assert lines[4] == "Header A | Header B |"
+        assert lines[5] == "| --- | --- |"
+        assert lines[6] == "data1 | data2 |"
+
+    def test_trafilatura_table_output(self):
+        """Simulate the actual trafilatura output for the HomeHub+ pricing table."""
+        text = (
+            "**HomeHub+ 5G**\n"
+            "\n"
+            "Ala Carte (price/month) | HomeHub+ 5G (price/month) | Savings | |\n"
+            "TV+ Pass (Entertainment+/Asian+) | $30.56 | $82.00 | Save up to $16.54/mth |\n"
+            "| 5Gbps Broadband | $45.00 | ||\n"
+            "| Netflix Standard Plan (2 screens) | $22.98 | ||\n"
+            "| Total monthly subscription | $98.54 |"
+        )
+        result = ContentExtractor._fix_markdown_tables(text)
+        lines = result.split("\n")
+        # Separator should be inserted after header row
+        assert "---" in lines[3]
+        # First data row should follow
+        assert "$30.56" in lines[4]

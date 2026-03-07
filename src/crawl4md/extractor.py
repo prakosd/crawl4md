@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import trafilatura
 from markdownify import markdownify
 
@@ -46,23 +48,67 @@ class ContentExtractor:
             include_links=True,
             include_tables=True,
         )
-        title = self._extract_title(result.html)
-        return ExtractedPage(
-            url=result.url,
-            title=title,
-            markdown=extracted or "",
-        )
-
-    def _extract_full_html(self, result: CrawlResult) -> ExtractedPage:
-        """Use markdownify on the (optionally tag-filtered) HTML."""
-        html = self._filter_tags(result.html)
-        md = markdownify(html, heading_style="ATX", strip=["img"])
+        md = self._fix_markdown_tables(extracted or "")
         title = self._extract_title(result.html)
         return ExtractedPage(
             url=result.url,
             title=title,
             markdown=md,
         )
+
+    def _extract_full_html(self, result: CrawlResult) -> ExtractedPage:
+        """Use markdownify on the (optionally tag-filtered) HTML."""
+        html = self._filter_tags(result.html)
+        md = markdownify(html, heading_style="ATX", strip=["img"], table_infer_header=True)
+        title = self._extract_title(result.html)
+        return ExtractedPage(
+            url=result.url,
+            title=title,
+            markdown=md,
+        )
+
+    @staticmethod
+    def _fix_markdown_tables(text: str) -> str:
+        """Insert missing separator rows so pipe-delimited blocks become valid Markdown tables.
+
+        Trafilatura sometimes emits pipe-delimited rows without the
+        ``| --- | --- |`` separator after the header row.  This method
+        detects consecutive lines containing ``|`` and adds a separator
+        when one is missing.
+        """
+        pipe_line = re.compile(r"^\|?.+\|.+\|?\s*$")
+        separator_line = re.compile(r"^\|?(\s*-{3,}\s*\|)+\s*-{3,}\s*\|?\s*$")
+
+        lines = text.split("\n")
+        result: list[str] = []
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            # Detect start of a table block (line with pipes)
+            if pipe_line.match(line):
+                # Collect consecutive pipe lines
+                block_start = i
+                block: list[str] = []
+                while i < len(lines) and pipe_line.match(lines[i]):
+                    block.append(lines[i])
+                    i += 1
+
+                if len(block) >= 2 and not separator_line.match(block[1]):
+                    # Count columns from the header row
+                    header = block[0]
+                    # Split on | and count non-empty segments
+                    cols = [c for c in header.split("|") if c.strip()]
+                    n_cols = max(len(cols), 1)
+                    sep = "| " + " | ".join("---" for _ in range(n_cols)) + " |"
+                    result.append(block[0])
+                    result.append(sep)
+                    result.extend(block[1:])
+                else:
+                    result.extend(block)
+            else:
+                result.append(line)
+                i += 1
+        return "\n".join(result)
 
     def _filter_tags(self, html: str) -> str:
         """Remove or keep only specified HTML tags using simple parsing."""
