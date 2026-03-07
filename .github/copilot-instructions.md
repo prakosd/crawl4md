@@ -42,3 +42,9 @@ src/crawl4md/
 ├── writer.py         # FileWriter class
 └── progress.py       # ProgressReporter class
 ```
+
+## Testing
+
+- Some tests (especially in `test_crawler.py`) involve retry rounds with `_ROUND_COOLDOWN` sleeps (default 30s per round). A single test can legitimately take 60+ seconds.
+- When running tests, **be patient** — do not assume a test is stuck or retry/re-run it just because it takes a while. Wait for the full output before drawing conclusions.
+- If a test is slow due to `_ROUND_COOLDOWN`, the proper fix is to patch it to 0 in the test (e.g. `@patch("crawl4md.crawler._ROUND_COOLDOWN", 0)`) or set `max_retries=0` in the test config — not to re-run the test.
