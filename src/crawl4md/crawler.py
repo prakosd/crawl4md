@@ -110,6 +110,7 @@ class SiteCrawler:
     async def _run_rounds_async(self) -> list[CrawlResult]:
         """Run the initial crawl + retry rounds, producing per-round and final files."""
         all_success: list[CrawlResult] = []
+        all_fail: list[CrawlResult] = []
         all_content_files: list[Path] = []
         all_fail_content_files: list[Path] = []
         total_rounds = 1 + self.config.max_retries  # round 1 + retries
@@ -133,6 +134,8 @@ class SiteCrawler:
             run_cfg=run_cfg,
             discover_links=True,
             round_prefix=round_prefix,
+            prior_success=0,
+            prior_fail=0,
         )
         success, fail = self._split_results(round_results)
         self._save_url_lists(success, fail, round_prefix)
@@ -143,9 +146,10 @@ class SiteCrawler:
             fail_files = self._fail_writer.flush()
             all_fail_content_files.extend(fail_files)
         all_success.extend(success)
+        all_fail.extend(fail)
 
         # --- Retry rounds ---
-        failed_urls = [r.url for r in fail]
+        failed_urls = [r.url for r in all_fail]
         for retry_num in range(1, self.config.max_retries + 1):
             if not failed_urls:
                 print(f"\nAll pages succeeded — skipping remaining retries.")
@@ -167,6 +171,8 @@ class SiteCrawler:
                 run_cfg=run_cfg,
                 discover_links=False,
                 round_prefix=round_prefix,
+                prior_success=len(all_success),
+                prior_fail=len(all_fail),
             )
             success, fail = self._split_results(round_results)
             self._save_url_lists(success, fail, round_prefix)
@@ -177,20 +183,22 @@ class SiteCrawler:
                 fail_files = self._fail_writer.flush()
                 all_fail_content_files.extend(fail_files)
             all_success.extend(success)
+            all_fail = [r for r in all_fail if r.url not in {s.url for s in success}]
+            all_fail.extend(fail)
             failed_urls = [r.url for r in fail]
 
         # --- Final merged files ---
-        self._write_final_files(all_success, failed_urls, all_content_files, all_fail_content_files)
+        remaining_fail_urls = [r.url for r in all_fail]
+        self._write_final_files(all_success, remaining_fail_urls, all_content_files, all_fail_content_files)
         self.content_files = self._get_final_content_files()
 
-        total_crawled = len(all_success) + len(failed_urls)
-        print(f"\nDone! {len(all_success)} succeeded, {len(failed_urls)} failed out of {total_crawled} total.")
+        total_crawled = len(all_success) + len(all_fail)
+        print(f"\nDone! {len(all_success)} succeeded, {len(all_fail)} failed out of {total_crawled} total.")
         assert self.output_dir is not None
         print(f"Output folder: {self.output_dir}")
 
         # Return all results (success + remaining failures) for API consumers
-        remaining_fail = [CrawlResult(url=u, success=False, error="Blocked by WAF") for u in failed_urls]
-        return all_success + remaining_fail
+        return all_success + all_fail
 
     # ------------------------------------------------------------------
     # Internals
@@ -204,6 +212,8 @@ class SiteCrawler:
         *,
         discover_links: bool = True,
         round_prefix: str = "",
+        prior_success: int = 0,
+        prior_fail: int = 0,
     ) -> list[CrawlResult]:
         """Crawl a list of URLs and return per-page results.
 
@@ -220,7 +230,11 @@ class SiteCrawler:
                 break
             generated.add(seed_url)
             queue.append((seed_url, 1))
-        progress = ProgressReporter(min(len(urls), self.config.limit))
+        progress = ProgressReporter(
+            min(len(urls), self.config.limit),
+            prior_success=prior_success,
+            prior_fail=prior_fail,
+        )
 
         async with AsyncWebCrawler(config=browser_cfg) as crawler:
             while queue and len(results) < self.config.limit:
@@ -274,7 +288,7 @@ class SiteCrawler:
                     crawl_result.markdown = ""
 
                 results.append(crawl_result)
-                progress.update(crawl_result.url)
+                progress.update(crawl_result.url, success=crawl_result.success)
 
                 # Extract and buffer content incrementally
                 if crawl_result.success and self._extractor and self._writer:
