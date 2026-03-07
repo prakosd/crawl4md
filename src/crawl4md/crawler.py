@@ -17,6 +17,7 @@ from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from crawl4md.config import CrawlerConfig, CrawlResult, ExtractedPage, PageConfig
 from crawl4md.extractor import ContentExtractor
 from crawl4md.progress import ProgressReporter
+from crawl4md.sorter import ContentSorter
 from crawl4md.writer import FileWriter
 
 # Allow asyncio.run() inside Jupyter's already-running event loop
@@ -195,6 +196,9 @@ class SiteCrawler:
         # --- Final merged files ---
         remaining_fail_urls = [r.url for r in all_fail]
         self._write_final_files(all_success, remaining_fail_urls, all_content_files, all_fail_content_files)
+
+        # --- Sorted final files (grouped by URL path) ---
+        self._write_sorted_files(all_success, all_fail)
         self.content_files = self._get_final_content_files()
 
         total_crawled = len(all_success) + len(all_fail)
@@ -424,9 +428,82 @@ class SiteCrawler:
                 shutil.copy2(src, dst)
                 final_index += 1
 
-    def _get_final_content_files(self) -> list[Path]:
-        """Return sorted list of final content files."""
+    def _write_sorted_files(
+        self,
+        all_success: list[CrawlResult],
+        all_fail: list[CrawlResult],
+    ) -> None:
+        """Re-extract, sort by URL path, and write sorted final files."""
+        if self._writer is None:
+            return
         assert self.output_dir is not None
+        ext = self.page_config.output_extension
+
+        # Sorted success content
+        if all_success and self._extractor is not None:
+            pages = [
+                self._extractor._extract_page(r)
+                for r in all_success
+                if r.markdown.strip()
+            ]
+            pages = [p for p in pages if p.markdown.strip()]
+            sorted_pages = ContentSorter.sort(pages)
+            if sorted_pages:
+                w = FileWriter(
+                    output_dir=self.output_dir,
+                    max_file_size_mb=self.page_config.max_file_size_mb,
+                    file_extension=ext,
+                    prefix="sorted_final_success_",
+                )
+                for page in sorted_pages:
+                    w.add(page)
+                w.flush()
+                # Sorted success URLs
+                path = self.output_dir / "sorted_final_success_urls.txt"
+                path.write_text(
+                    "\n".join(p.url for p in sorted_pages),
+                    encoding="utf-8",
+                )
+
+        # Sorted fail content
+        if all_fail:
+            fail_pages = []
+            for r in all_fail:
+                raw_body = r.markdown.strip() or r.html.strip() or "(no response)"
+                fail_pages.append(ExtractedPage(
+                    url=r.url,
+                    title=f"FAILED — {r.error or 'Unknown error'}",
+                    markdown=(
+                        f"**Error:** {r.error or 'Unknown error'}\n\n"
+                        f"**Raw response:**\n\n{raw_body}"
+                    ),
+                ))
+            sorted_fail = ContentSorter.sort(fail_pages)
+            if sorted_fail:
+                w = FileWriter(
+                    output_dir=self.output_dir,
+                    max_file_size_mb=self.page_config.max_file_size_mb,
+                    file_extension=ext,
+                    prefix="sorted_final_fail_",
+                )
+                for page in sorted_fail:
+                    w.add(page)
+                w.flush()
+                # Sorted fail URLs
+                path = self.output_dir / "sorted_final_fail_urls.txt"
+                path.write_text(
+                    "\n".join(p.url for p in sorted_fail),
+                    encoding="utf-8",
+                )
+
+    def _get_final_content_files(self) -> list[Path]:
+        """Return sorted list of final content files (prefers sorted versions)."""
+        assert self.output_dir is not None
+        sorted_pattern = f"sorted_final_success_content_*{self.page_config.output_extension}"
+        sorted_files = sorted(self.output_dir.glob(sorted_pattern))
+        if sorted_files:
+            return sorted_files
+        # Fall back to unsorted final files when sorting produced nothing
         pattern = f"final_success_content_*{self.page_config.output_extension}"
         return sorted(self.output_dir.glob(pattern))
 

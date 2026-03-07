@@ -11,9 +11,11 @@ from crawl4md.config import (
 from crawl4md.crawler import SiteCrawler
 from crawl4md.extractor import ContentExtractor
 from crawl4md.progress import ProgressReporter
+from crawl4md.sorter import ContentSorter
 from crawl4md.writer import FileWriter
 
 __all__ = [
+    "ContentSorter",
     "CrawlResult",
     "CrawlerConfig",
     "ContentExtractor",
