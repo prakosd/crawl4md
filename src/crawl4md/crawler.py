@@ -120,12 +120,29 @@ class SiteCrawler:
                 try:
                     result = await crawler.arun(url=url, config=run_cfg)
 
+                    # Use the final URL after any redirects
+                    final_url = getattr(result, "redirected_url", None) or url
+                    redirected = final_url != url
+
+                    # Deduplicate: skip if the redirect target was already visited
+                    if redirected and final_url in visited:
+                        continue
+
+                    # Mark the final URL as visited so future duplicates are skipped
+                    visited.add(final_url)
+                    generated.add(final_url)
+
+                    # Filter the final URL against include/exclude rules
+                    if redirected and not self._url_allowed(final_url):
+                        continue
+
                     crawl_result = CrawlResult(
-                        url=url,
+                        url=final_url,
                         html=result.html or "",
                         markdown=result.markdown or "",
                         success=result.success,
                         error=None if result.success else str(getattr(result, "error", "")),
+                        redirected_url=final_url if redirected else None,
                     )
                 except Exception as exc:
                     crawl_result = CrawlResult(
@@ -137,7 +154,7 @@ class SiteCrawler:
                     )
 
                 results.append(crawl_result)
-                progress.update(url)
+                progress.update(crawl_result.url)
 
                 # Extract and buffer content incrementally
                 if crawl_result.success and self._extractor and self._writer:
@@ -158,7 +175,7 @@ class SiteCrawler:
 
                 # Discover links for deeper crawling
                 if depth < self.config.max_depth and crawl_result.success:
-                    new_links = self._extract_links(crawl_result, url)
+                    new_links = self._extract_links(crawl_result, crawl_result.url)
                     for link in new_links:
                         if len(generated) >= self.config.limit:
                             break

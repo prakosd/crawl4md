@@ -121,6 +121,7 @@ class CrawlResult(BaseModel):
     markdown: str = ""
     success: bool = True
     error: str | None = None
+    redirected_url: str | None = None
 
 
 class ExtractedPage(BaseModel):

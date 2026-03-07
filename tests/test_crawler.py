@@ -12,13 +12,14 @@ from crawl4md.extractor import ContentExtractor
 from crawl4md.writer import FileWriter
 
 
-def _make_mock_result(url: str, html: str = "<p>hello</p>", markdown: str = "hello"):
+def _make_mock_result(url: str, html: str = "<p>hello</p>", markdown: str = "hello", *, redirected_url: str | None = None):
     """Create a mock crawl4ai result object."""
     result = MagicMock()
     result.url = url
     result.html = html
     result.markdown = markdown
     result.success = True
+    result.redirected_url = redirected_url
     return result
 
 
@@ -199,3 +200,124 @@ class TestSiteCrawler:
         assert len(crawler.content_files) >= 1
         content = crawler.content_files[0].read_text(encoding="utf-8")
         assert "https://example.com" in content
+
+    @patch("crawl4md.crawler.AsyncWebCrawler")
+    def test_redirect_updates_result_url(self, mock_crawler_cls, tmp_path: Path):
+        """CrawlResult.url should be the final URL after a redirect."""
+        mock_result = _make_mock_result(
+            "https://example.com/old",
+            redirected_url="https://example.com/new",
+        )
+
+        mock_instance = AsyncMock()
+        mock_instance.arun = AsyncMock(return_value=mock_result)
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_crawler_cls.return_value = mock_instance
+
+        config = CrawlerConfig(urls=["https://example.com/old"], limit=1)
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        results = crawler.crawl()
+
+        assert len(results) == 1
+        assert results[0].url == "https://example.com/new"
+        assert results[0].redirected_url == "https://example.com/new"
+
+    @patch("crawl4md.crawler.AsyncWebCrawler")
+    def test_redirect_deduplicates_when_both_urls_are_seeds(self, mock_crawler_cls, tmp_path: Path):
+        """Seeding both the original and redirect target should produce one result."""
+        original = "https://example.com/old"
+        target = "https://example.com/new"
+
+        mock_result_redirect = _make_mock_result(original, redirected_url=target)
+        mock_result_direct = _make_mock_result(target)
+
+        mock_instance = AsyncMock()
+        # First call: /old redirects to /new. Second call: /new (direct).
+        mock_instance.arun = AsyncMock(side_effect=[mock_result_redirect, mock_result_direct])
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_crawler_cls.return_value = mock_instance
+
+        config = CrawlerConfig(urls=[original, target], limit=10)
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        results = crawler.crawl()
+
+        # Only one result — the second seed is skipped because /new is already visited
+        assert len(results) == 1
+        assert results[0].url == target
+        # arun should be called only once (the second URL is skipped before crawling)
+        assert mock_instance.arun.call_count == 1
+
+    @patch("crawl4md.crawler.AsyncWebCrawler")
+    def test_redirect_deduplicates_reverse_order(self, mock_crawler_cls, tmp_path: Path):
+        """If the target is crawled first, the redirecting URL is still deduplicated."""
+        original = "https://example.com/old"
+        target = "https://example.com/new"
+
+        mock_result_direct = _make_mock_result(target)
+        mock_result_redirect = _make_mock_result(original, redirected_url=target)
+
+        mock_instance = AsyncMock()
+        mock_instance.arun = AsyncMock(side_effect=[mock_result_direct, mock_result_redirect])
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_crawler_cls.return_value = mock_instance
+
+        config = CrawlerConfig(urls=[target, original], limit=10)
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        results = crawler.crawl()
+
+        # Two arun calls happen (we can't know /old redirects until we crawl it),
+        # but only one result is kept since /new is already visited
+        assert len(results) == 1
+        assert results[0].url == target
+
+    @patch("crawl4md.crawler.AsyncWebCrawler")
+    def test_redirect_links_resolved_against_final_url(self, mock_crawler_cls, tmp_path: Path):
+        """Links discovered on a redirected page should resolve against the final URL."""
+        html = '<a href="sibling">Link</a>'
+        mock_result = _make_mock_result(
+            "https://example.com/old",
+            html=html,
+            redirected_url="https://example.com/section/new",
+        )
+
+        mock_instance = AsyncMock()
+        mock_instance.arun = AsyncMock(return_value=mock_result)
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_crawler_cls.return_value = mock_instance
+
+        config = CrawlerConfig(urls=["https://example.com/old"], limit=1, max_depth=2)
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        crawler.crawl()
+
+        # The relative link "sibling" should resolve against /section/new
+        urls_file = (crawler.output_dir / "urls.txt").read_text(encoding="utf-8")
+        assert "https://example.com/section/new" in urls_file
+
+    @patch("crawl4md.crawler.AsyncWebCrawler")
+    def test_redirect_to_disallowed_path_is_skipped(self, mock_crawler_cls, tmp_path: Path):
+        """A redirect landing outside include_only_paths should be skipped."""
+        mock_result = _make_mock_result(
+            "https://example.com/blog/post",
+            redirected_url="https://example.com/enterprise/page",
+        )
+
+        mock_instance = AsyncMock()
+        mock_instance.arun = AsyncMock(return_value=mock_result)
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_crawler_cls.return_value = mock_instance
+
+        config = CrawlerConfig(
+            urls=["https://example.com/blog/post"],
+            include_only_paths=["/blog"],
+            limit=1,
+        )
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        results = crawler.crawl()
+
+        # The redirect target is outside /blog, so it should be skipped
+        assert len(results) == 0
