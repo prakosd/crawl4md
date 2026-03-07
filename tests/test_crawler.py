@@ -648,6 +648,84 @@ class TestFailContentFiles:
         fail_files = list(crawler.output_dir.glob("*fail_content*"))
         assert len(fail_files) == 0
 
+
+class TestPrintSummary:
+    """Tests for SiteCrawler.print_summary()."""
+
+    def test_prints_success_and_fail_counts(self, tmp_path: Path, capsys):
+        from crawl4md.config import CrawlResult
+
+        config = CrawlerConfig(urls=["https://example.com"])
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        crawler.output_dir = tmp_path
+
+        results = [
+            CrawlResult(url="https://example.com/a", success=True),
+            CrawlResult(url="https://example.com/b", success=False, error="fail"),
+        ]
+        crawler.print_summary(results)
+        out = capsys.readouterr().out
+        assert "1 succeeded" in out
+        assert "1 failed" in out
+        assert str(tmp_path) in out
+
+    def test_prints_round_files(self, tmp_path: Path, capsys):
+        from crawl4md.config import CrawlResult
+
+        config = CrawlerConfig(urls=["https://example.com"])
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        crawler.output_dir = tmp_path
+
+        # Create dummy round files
+        (tmp_path / "round_1_success_content_001.md").write_text("x" * 100, encoding="utf-8")
+        (tmp_path / "round_1_success_urls.txt").write_text("https://example.com/a", encoding="utf-8")
+
+        results = [CrawlResult(url="https://example.com/a", success=True)]
+        crawler.print_summary(results)
+        out = capsys.readouterr().out
+        assert "--- Round 1 ---" in out
+        assert "round_1_success_content_001.md" in out
+
+    def test_prints_sorted_files(self, tmp_path: Path, capsys):
+        from crawl4md.config import CrawlResult
+
+        config = CrawlerConfig(urls=["https://example.com"])
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        crawler.output_dir = tmp_path
+
+        (tmp_path / "sorted_final_success_content_001.md").write_text("data", encoding="utf-8")
+        (tmp_path / "sorted_final_success_urls.txt").write_text("url", encoding="utf-8")
+
+        results = [CrawlResult(url="https://example.com/a", success=True)]
+        crawler.print_summary(results)
+        out = capsys.readouterr().out
+        assert "Sorted by URL path" in out
+        assert "sorted_final_success_content_001.md" in out
+
+    def test_prints_fail_hint(self, tmp_path: Path, capsys):
+        from crawl4md.config import CrawlResult
+
+        config = CrawlerConfig(urls=["https://example.com"])
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        crawler.output_dir = tmp_path
+
+        results = [
+            CrawlResult(url="https://example.com/a", success=False, error="blocked"),
+            CrawlResult(url="https://example.com/b", success=False, error="blocked"),
+        ]
+        crawler.print_summary(results)
+        out = capsys.readouterr().out
+        assert "2 URL(s) that could not be crawled" in out
+
+    def test_no_output_dir_shows_message(self, capsys):
+        config = CrawlerConfig(urls=["https://example.com"])
+        crawler = SiteCrawler(config)
+        crawler.output_dir = None
+
+        crawler.print_summary([])
+        out = capsys.readouterr().out
+        assert "No output folder found" in out
+
     @patch("crawl4md.crawler._ROUND_COOLDOWN", 0)
     @patch("crawl4md.crawler.AsyncWebCrawler")
     def test_fail_content_merged_across_rounds(self, mock_crawler_cls, tmp_path: Path):

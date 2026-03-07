@@ -101,6 +101,69 @@ class SiteCrawler:
             all_results = asyncio.run(self._run_rounds_async())
         return all_results
 
+    def print_summary(self, results: list[CrawlResult]) -> None:
+        """Print a human-readable summary of crawl results and output files."""
+        if self.output_dir is None or not self.output_dir.exists():
+            print("No output folder found. Did you run crawl() first?")
+            return
+
+        success_count = sum(1 for r in results if r.success)
+        fail_count = sum(1 for r in results if not r.success)
+
+        print(f"Results: {success_count} succeeded, {fail_count} failed")
+        print(f"Output folder: {self.output_dir}\n")
+
+        def _print_files(label: str, paths: list[Path]) -> None:
+            if not paths:
+                return
+            print(f"  {label}:")
+            for f in paths:
+                size_mb = f.stat().st_size / (1024 * 1024)
+                print(f"    {f.name} ({size_mb:.2f} MB)")
+            print()
+
+        # --- Per-round files ---
+        round_nums = sorted({
+            int(m.group(1))
+            for f in self.output_dir.iterdir()
+            if (m := re.match(r"round_(\d+)_", f.name))
+        })
+        for rn in round_nums:
+            prefix = f"round_{rn}_"
+            content = sorted(self.output_dir.glob(f"{prefix}success_content_*"))
+            fail_content = sorted(self.output_dir.glob(f"{prefix}fail_content_*"))
+            url_files = sorted(self.output_dir.glob(f"{prefix}*urls*.txt"))
+            print(f"--- Round {rn} ---")
+            _print_files("Success content", content)
+            _print_files("Fail content", fail_content)
+            _print_files("URL lists", url_files)
+
+        # --- Final merged files (unsorted) ---
+        final_success = sorted(self.output_dir.glob("final_success_content_*"))
+        final_fail = sorted(self.output_dir.glob("final_fail_content_*"))
+        final_urls = sorted(self.output_dir.glob("final_*_urls.txt"))
+        if final_success or final_fail:
+            print("--- Final (unsorted) ---")
+            _print_files("Success content", final_success)
+            _print_files("Fail content", final_fail)
+            _print_files("URL lists", final_urls)
+
+        # --- Sorted files (primary output) ---
+        sorted_success = sorted(self.output_dir.glob("sorted_final_success_content_*"))
+        sorted_fail = sorted(self.output_dir.glob("sorted_final_fail_content_*"))
+        sorted_urls = sorted(self.output_dir.glob("sorted_final_*_urls.txt"))
+        if sorted_success or sorted_fail:
+            print("--- Sorted by URL path (primary output) ---")
+            _print_files("Success content", sorted_success)
+            _print_files("Fail content", sorted_fail)
+            _print_files("URL lists", sorted_urls)
+
+        if fail_count > 0:
+            print(
+                f"See sorted_final_fail_urls.txt for the "
+                f"{fail_count} URL(s) that could not be crawled."
+            )
+
     def _run_rounds_in_proactor_loop(self) -> list[CrawlResult]:
         loop = asyncio.ProactorEventLoop()
         asyncio.set_event_loop(loop)
