@@ -84,8 +84,8 @@ class SiteCrawler:
         round 1 crawls seed URLs; subsequent rounds retry blocked/failed
         URLs up to ``max_retries`` times.  Each round writes per-round
         files (``round_N_*``).  After all rounds, final merged files
-        are produced (``content_*.ext``, ``urls_success.txt``,
-        ``urls_fail.txt``).
+        are produced (``final_success_content_*.ext``,
+        ``final_success_urls.txt``, ``final_fail_urls.txt``).
         """
         self.output_dir = self._create_output_dir()
         # Attach output_dir to writer so incremental flushes land there
@@ -129,7 +129,7 @@ class SiteCrawler:
         # --- Round 1: full crawl with link discovery ---
         round_prefix = "round_1_"
         if self._writer is not None:
-            self._writer.reset(round_prefix)
+            self._writer.reset(f"{round_prefix}success_")
         if self._fail_writer is not None:
             self._fail_writer.reset(f"{round_prefix}fail_")
         print(f"--- Round 1/{total_rounds}: Crawling {len(self.config.urls)} seed URL(s) ---")
@@ -163,7 +163,7 @@ class SiteCrawler:
             round_num = retry_num + 1
             round_prefix = f"round_{round_num}_"
             if self._writer is not None:
-                self._writer.reset(round_prefix)
+                self._writer.reset(f"{round_prefix}success_")
             if self._fail_writer is not None:
                 self._fail_writer.reset(f"{round_prefix}fail_")
 
@@ -380,10 +380,10 @@ class SiteCrawler:
         """Write per-round success and fail URL lists."""
         assert self.output_dir is not None
         if success:
-            path = self.output_dir / f"{prefix}urls_success.txt"
+            path = self.output_dir / f"{prefix}success_urls.txt"
             path.write_text("\n".join(r.url for r in success), encoding="utf-8")
         if fail:
-            path = self.output_dir / f"{prefix}urls_fail.txt"
+            path = self.output_dir / f"{prefix}fail_urls.txt"
             path.write_text("\n".join(r.url for r in fail), encoding="utf-8")
 
     def _write_final_files(
@@ -396,43 +396,39 @@ class SiteCrawler:
         """Produce final merged output files."""
         assert self.output_dir is not None
 
-        # urls_success.txt — all successful URLs across all rounds
+        # final_success_urls.txt — all successful URLs across all rounds
         if all_success:
-            path = self.output_dir / "urls_success.txt"
+            path = self.output_dir / "final_success_urls.txt"
             path.write_text("\n".join(r.url for r in all_success), encoding="utf-8")
 
-        # urls_fail.txt — URLs that still failed after all retries
+        # final_fail_urls.txt — URLs that still failed after all retries
         if remaining_fail_urls:
-            path = self.output_dir / "urls_fail.txt"
+            path = self.output_dir / "final_fail_urls.txt"
             path.write_text("\n".join(remaining_fail_urls), encoding="utf-8")
 
-        # Merge all per-round content files into final content_001.ext, content_002.ext, ...
+        # Merge per-round content → final_success_content_001.ext, …
         if all_content_files:
             ext = self.page_config.output_extension
             final_index = 1
             for src in all_content_files:
-                dst = self.output_dir / f"content_{final_index:03d}{ext}"
+                dst = self.output_dir / f"final_success_content_{final_index:03d}{ext}"
                 shutil.copy2(src, dst)
                 final_index += 1
 
-        # Merge all per-round fail content files into final fail_content_001.ext, ...
+        # Merge per-round fail content → final_fail_content_001.ext, …
         if all_fail_content_files:
             ext = self.page_config.output_extension
             final_index = 1
             for src in all_fail_content_files:
-                dst = self.output_dir / f"fail_content_{final_index:03d}{ext}"
+                dst = self.output_dir / f"final_fail_content_{final_index:03d}{ext}"
                 shutil.copy2(src, dst)
                 final_index += 1
 
     def _get_final_content_files(self) -> list[Path]:
-        """Return sorted list of final (unprefixed) content files."""
+        """Return sorted list of final content files."""
         assert self.output_dir is not None
-        pattern = f"content_*{self.page_config.output_extension}"
-        files = [
-            f for f in sorted(self.output_dir.glob(pattern))
-            if not f.name.startswith("round_")
-        ]
-        return files
+        pattern = f"final_success_content_*{self.page_config.output_extension}"
+        return sorted(self.output_dir.glob(pattern))
 
     def _build_run_config(self, run_config_cls: type) -> object:
         """Map PageConfig to a Crawl4AI CrawlerRunConfig."""

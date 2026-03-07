@@ -157,7 +157,7 @@ class TestSiteCrawler:
         assert results[0].url == "https://example.com"
         assert results[0].success is True
         assert crawler.output_dir is not None
-        assert (crawler.output_dir / "urls_success.txt").exists()
+        assert (crawler.output_dir / "final_success_urls.txt").exists()
 
     def test_stealth_enables_browser_and_run_flags(self):
         """Stealth mode sets enable_stealth, simulate_user, override_navigator, magic."""
@@ -283,8 +283,8 @@ class TestSaveUrlLists:
         fail = [CrawlResult(url="https://example.com/b", success=False, error="Blocked")]
         crawler._save_url_lists(success, fail, "round_1_")
 
-        assert (tmp_path / "round_1_urls_success.txt").read_text(encoding="utf-8") == "https://example.com/a"
-        assert (tmp_path / "round_1_urls_fail.txt").read_text(encoding="utf-8") == "https://example.com/b"
+        assert (tmp_path / "round_1_success_urls.txt").read_text(encoding="utf-8") == "https://example.com/a"
+        assert (tmp_path / "round_1_fail_urls.txt").read_text(encoding="utf-8") == "https://example.com/b"
 
     def test_no_fail_file_when_all_succeed(self, tmp_path: Path):
         from crawl4md.config import CrawlResult
@@ -296,8 +296,8 @@ class TestSaveUrlLists:
         success = [CrawlResult(url="https://example.com/a", success=True)]
         crawler._save_url_lists(success, [], "round_1_")
 
-        assert (tmp_path / "round_1_urls_success.txt").exists()
-        assert not (tmp_path / "round_1_urls_fail.txt").exists()
+        assert (tmp_path / "round_1_success_urls.txt").exists()
+        assert not (tmp_path / "round_1_fail_urls.txt").exists()
 
 
 class TestRetryRounds:
@@ -340,12 +340,12 @@ class TestRetryRounds:
 
         assert crawler.output_dir is not None
         # Round 1 files
-        assert (crawler.output_dir / "round_1_urls_success.txt").exists()
-        assert (crawler.output_dir / "round_1_urls_fail.txt").exists()
+        assert (crawler.output_dir / "round_1_success_urls.txt").exists()
+        assert (crawler.output_dir / "round_1_fail_urls.txt").exists()
         # Round 2 files
-        assert (crawler.output_dir / "round_2_urls_success.txt").exists()
+        assert (crawler.output_dir / "round_2_success_urls.txt").exists()
         # Final files
-        assert (crawler.output_dir / "urls_success.txt").exists()
+        assert (crawler.output_dir / "final_success_urls.txt").exists()
         # All pages should succeed after retry
         success = [r for r in results if r.success]
         assert len(success) == 2
@@ -371,13 +371,13 @@ class TestRetryRounds:
 
         assert crawler.output_dir is not None
         # Round 1 exists
-        assert (crawler.output_dir / "round_1_urls_success.txt").exists()
+        assert (crawler.output_dir / "round_1_success_urls.txt").exists()
         # Round 2 should NOT exist (early exit)
-        assert not (crawler.output_dir / "round_2_urls_success.txt").exists()
-        assert not (crawler.output_dir / "round_2_urls_fail.txt").exists()
+        assert not (crawler.output_dir / "round_2_success_urls.txt").exists()
+        assert not (crawler.output_dir / "round_2_fail_urls.txt").exists()
         # Final success
-        assert (crawler.output_dir / "urls_success.txt").exists()
-        assert not (crawler.output_dir / "urls_fail.txt").exists()
+        assert (crawler.output_dir / "final_success_urls.txt").exists()
+        assert not (crawler.output_dir / "final_fail_urls.txt").exists()
 
     @patch("crawl4md.crawler._ROUND_COOLDOWN", 0)
     @patch("crawl4md.crawler.AsyncWebCrawler")
@@ -401,11 +401,11 @@ class TestRetryRounds:
 
         assert crawler.output_dir is not None
         # Only round 1
-        assert (crawler.output_dir / "round_1_urls_fail.txt").exists()
-        assert not (crawler.output_dir / "round_2_urls_fail.txt").exists()
+        assert (crawler.output_dir / "round_1_fail_urls.txt").exists()
+        assert not (crawler.output_dir / "round_2_fail_urls.txt").exists()
         # Final fail
-        assert (crawler.output_dir / "urls_fail.txt").exists()
-        assert not (crawler.output_dir / "urls_success.txt").exists()
+        assert (crawler.output_dir / "final_fail_urls.txt").exists()
+        assert not (crawler.output_dir / "final_success_urls.txt").exists()
         # No content files since everything was blocked
         assert len(crawler.content_files) == 0
 
@@ -502,7 +502,7 @@ class TestRetryRounds:
         crawler.crawl()
 
         # The relative link "sibling" should resolve against /section/new
-        urls_file = (crawler.output_dir / "urls_success.txt").read_text(encoding="utf-8")
+        urls_file = (crawler.output_dir / "final_success_urls.txt").read_text(encoding="utf-8")
         assert "https://example.com/section/new" in urls_file
 
     @patch("crawl4md.crawler.AsyncWebCrawler")
@@ -567,7 +567,7 @@ class TestFailContentFiles:
         assert "blocked page text" in content  # raw response preserved
 
         # Final merged fail content file
-        final_fail = list(crawler.output_dir.glob("fail_content_*.txt"))
+        final_fail = list(crawler.output_dir.glob("final_fail_content_*.txt"))
         assert len(final_fail) >= 1
 
     @patch("crawl4ml.crawler._ROUND_COOLDOWN", 0) if False else patch("crawl4md.crawler._ROUND_COOLDOWN", 0)
@@ -678,5 +678,5 @@ class TestFailContentFiles:
         assert len(round1_fail) >= 1
         assert len(round2_fail) >= 1
         # Final merged fail content
-        final_fail = list(crawler.output_dir.glob("fail_content_*.txt"))
+        final_fail = list(crawler.output_dir.glob("final_fail_content_*.txt"))
         assert len(final_fail) >= 1
