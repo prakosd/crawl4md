@@ -14,7 +14,7 @@ from pathlib import Path
 import nest_asyncio
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 
-from crawl4md.config import CrawlerConfig, CrawlResult, PageConfig
+from crawl4md.config import CrawlerConfig, CrawlResult, ExtractedPage, PageConfig
 from crawl4md.extractor import ContentExtractor
 from crawl4md.progress import ProgressReporter
 from crawl4md.writer import FileWriter
@@ -60,6 +60,13 @@ class SiteCrawler:
         self._extractor = extractor
         self._writer = writer
         self.content_files: list[Path] = []
+        # Internal writer for failed-page content (symmetrical with _writer)
+        self._fail_writer: FileWriter | None = None
+        if writer is not None:
+            self._fail_writer = FileWriter(
+                max_file_size_mb=self.page_config.max_file_size_mb,
+                file_extension=writer._file_extension,
+            )
 
     # ------------------------------------------------------------------
     # Public API
@@ -79,6 +86,8 @@ class SiteCrawler:
         # Attach output_dir to writer so incremental flushes land there
         if self._writer is not None:
             self._writer._output_dir = self.output_dir
+        if self._fail_writer is not None:
+            self._fail_writer._output_dir = self.output_dir
         if sys.platform == "win32":
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 all_results = pool.submit(self._run_rounds_in_proactor_loop).result()
@@ -102,6 +111,7 @@ class SiteCrawler:
         """Run the initial crawl + retry rounds, producing per-round and final files."""
         all_success: list[CrawlResult] = []
         all_content_files: list[Path] = []
+        all_fail_content_files: list[Path] = []
         total_rounds = 1 + self.config.max_retries  # round 1 + retries
 
         browser_cfg = BrowserConfig(
@@ -114,6 +124,8 @@ class SiteCrawler:
         round_prefix = "round_1_"
         if self._writer is not None:
             self._writer.reset(round_prefix)
+        if self._fail_writer is not None:
+            self._fail_writer.reset(f"{round_prefix}fail_")
         print(f"--- Round 1/{total_rounds}: Crawling {len(self.config.urls)} seed URL(s) ---")
         round_results = await self._crawl_urls_async(
             urls=self.config.urls,
@@ -127,6 +139,9 @@ class SiteCrawler:
         if self._writer is not None:
             round_files = self._writer.flush()
             all_content_files.extend(round_files)
+        if self._fail_writer is not None:
+            fail_files = self._fail_writer.flush()
+            all_fail_content_files.extend(fail_files)
         all_success.extend(success)
 
         # --- Retry rounds ---
@@ -140,6 +155,8 @@ class SiteCrawler:
             round_prefix = f"round_{round_num}_"
             if self._writer is not None:
                 self._writer.reset(round_prefix)
+            if self._fail_writer is not None:
+                self._fail_writer.reset(f"{round_prefix}fail_")
 
             print(f"\n--- Round {round_num}/{total_rounds}: Retrying {len(failed_urls)} failed URL(s) (waiting {_ROUND_COOLDOWN}s cooldown) ---")
             await asyncio.sleep(_ROUND_COOLDOWN)
@@ -156,11 +173,14 @@ class SiteCrawler:
             if self._writer is not None:
                 round_files = self._writer.flush()
                 all_content_files.extend(round_files)
+            if self._fail_writer is not None:
+                fail_files = self._fail_writer.flush()
+                all_fail_content_files.extend(fail_files)
             all_success.extend(success)
             failed_urls = [r.url for r in fail]
 
         # --- Final merged files ---
-        self._write_final_files(all_success, failed_urls, all_content_files)
+        self._write_final_files(all_success, failed_urls, all_content_files, all_fail_content_files)
         self.content_files = self._get_final_content_files()
 
         total_crawled = len(all_success) + len(failed_urls)
@@ -247,6 +267,7 @@ class SiteCrawler:
                     )
 
                 # Detect WAF blocks (Incapsula etc. return HTTP 200 with block HTML)
+                raw_markdown = crawl_result.markdown
                 if crawl_result.success and self._is_blocked(crawl_result.html):
                     crawl_result.success = False
                     crawl_result.error = "Blocked by WAF"
@@ -261,10 +282,25 @@ class SiteCrawler:
                     if page.markdown.strip():
                         self._writer.add(page)
 
+                # Buffer failed-page content for the fail content file
+                if not crawl_result.success and self._fail_writer is not None:
+                    raw_body = raw_markdown.strip() or crawl_result.html.strip() or "(no response)"
+                    fail_page = ExtractedPage(
+                        url=crawl_result.url,
+                        title=f"FAILED — {crawl_result.error or 'Unknown error'}",
+                        markdown=(
+                            f"**Error:** {crawl_result.error or 'Unknown error'}\n\n"
+                            f"**Raw response:**\n\n{raw_body}"
+                        ),
+                    )
+                    self._fail_writer.add(fail_page)
+
                 # Flush content and URL lists periodically
                 if len(results) % self.config.flush_interval == 0:
                     if self._writer is not None:
                         self._writer.flush()
+                    if self._fail_writer is not None:
+                        self._fail_writer.flush()
                     success, fail = self._split_results(results)
                     self._save_url_lists(success, fail, round_prefix)
 
@@ -330,6 +366,7 @@ class SiteCrawler:
         all_success: list[CrawlResult],
         remaining_fail_urls: list[str],
         all_content_files: list[Path],
+        all_fail_content_files: list[Path] | None = None,
     ) -> None:
         """Produce final merged output files."""
         assert self.output_dir is not None
@@ -350,6 +387,15 @@ class SiteCrawler:
             final_index = 1
             for src in all_content_files:
                 dst = self.output_dir / f"content_{final_index:03d}{ext}"
+                shutil.copy2(src, dst)
+                final_index += 1
+
+        # Merge all per-round fail content files into final fail_content_001.ext, ...
+        if all_fail_content_files:
+            ext = self.page_config.output_extension
+            final_index = 1
+            for src in all_fail_content_files:
+                dst = self.output_dir / f"fail_content_{final_index:03d}{ext}"
                 shutil.copy2(src, dst)
                 final_index += 1
 

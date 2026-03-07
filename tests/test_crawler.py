@@ -483,3 +483,154 @@ class TestRetryRounds:
 
         # The redirect target is outside /blog, so it should be skipped
         assert len(results) == 0
+
+
+class TestFailContentFiles:
+    """Tests for fail content file generation (symmetrical with success content)."""
+
+    @patch("crawl4md.crawler._ROUND_COOLDOWN", 0)
+    @patch("crawl4md.crawler.AsyncWebCrawler")
+    def test_fail_content_file_created_for_blocked_page(self, mock_crawler_cls, tmp_path: Path):
+        """Blocked pages produce a fail content file with error and raw response."""
+        blocked_html = '<html><body>Request unsuccessful. Incapsula incident ID: 123</body></html>'
+        blocked_result = _make_mock_result("https://example.com/blocked", blocked_html, "blocked page text")
+
+        mock_instance = AsyncMock()
+        mock_instance.arun = AsyncMock(return_value=blocked_result)
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_crawler_cls.return_value = mock_instance
+
+        from crawl4md.config import PageConfig
+
+        config = CrawlerConfig(urls=["https://example.com/blocked"], limit=1, max_retries=0, flush_interval=1)
+        page_config = PageConfig(extract_main_content=False)
+        extractor = ContentExtractor(page_config)
+        writer = FileWriter(max_file_size_mb=15.0)
+
+        crawler = SiteCrawler(config, page_config, output_base=tmp_path, extractor=extractor, writer=writer)
+        crawler.crawl()
+
+        assert crawler.output_dir is not None
+        # Per-round fail content file
+        fail_files = list(crawler.output_dir.glob("round_1_fail_content_*.txt"))
+        assert len(fail_files) >= 1
+        content = fail_files[0].read_text(encoding="utf-8")
+        assert "https://example.com/blocked" in content
+        assert "Blocked by WAF" in content
+        assert "blocked page text" in content  # raw response preserved
+
+        # Final merged fail content file
+        final_fail = list(crawler.output_dir.glob("fail_content_*.txt"))
+        assert len(final_fail) >= 1
+
+    @patch("crawl4ml.crawler._ROUND_COOLDOWN", 0) if False else patch("crawl4md.crawler._ROUND_COOLDOWN", 0)
+    @patch("crawl4md.crawler.AsyncWebCrawler")
+    def test_fail_content_includes_error_and_raw_markdown(self, mock_crawler_cls, tmp_path: Path):
+        """Fail content contains both the error reason and the raw markdown response."""
+        blocked_html = '<html><body>Access Denied</title></body></html>'
+        blocked_result = _make_mock_result("https://example.com/denied", blocked_html, "access denied markdown")
+
+        mock_instance = AsyncMock()
+        mock_instance.arun = AsyncMock(return_value=blocked_result)
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_crawler_cls.return_value = mock_instance
+
+        from crawl4md.config import PageConfig
+
+        config = CrawlerConfig(urls=["https://example.com/denied"], limit=1, max_retries=0, flush_interval=1)
+        page_config = PageConfig(extract_main_content=False)
+        extractor = ContentExtractor(page_config)
+        writer = FileWriter(max_file_size_mb=15.0)
+
+        crawler = SiteCrawler(config, page_config, output_base=tmp_path, extractor=extractor, writer=writer)
+        crawler.crawl()
+
+        assert crawler.output_dir is not None
+        fail_files = list(crawler.output_dir.glob("round_1_fail_content_*.txt"))
+        assert len(fail_files) >= 1
+        content = fail_files[0].read_text(encoding="utf-8")
+        assert "**Error:** Blocked by WAF" in content
+        assert "**Raw response:**" in content
+        assert "access denied markdown" in content
+
+    @patch("crawl4md.crawler._ROUND_COOLDOWN", 0)
+    @patch("crawl4md.crawler.AsyncWebCrawler")
+    def test_no_fail_content_when_all_succeed(self, mock_crawler_cls, tmp_path: Path):
+        """No fail content files are created when all pages succeed."""
+        ok_result = _make_mock_result("https://example.com/ok", "<p>ok</p>", "ok content")
+
+        mock_instance = AsyncMock()
+        mock_instance.arun = AsyncMock(return_value=ok_result)
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_crawler_cls.return_value = mock_instance
+
+        from crawl4md.config import PageConfig
+
+        config = CrawlerConfig(urls=["https://example.com/ok"], limit=1, max_retries=0, flush_interval=1)
+        page_config = PageConfig(extract_main_content=False)
+        extractor = ContentExtractor(page_config)
+        writer = FileWriter(max_file_size_mb=15.0)
+
+        crawler = SiteCrawler(config, page_config, output_base=tmp_path, extractor=extractor, writer=writer)
+        crawler.crawl()
+
+        assert crawler.output_dir is not None
+        fail_files = list(crawler.output_dir.glob("*fail_content*"))
+        assert len(fail_files) == 0
+
+    @patch("crawl4md.crawler._ROUND_COOLDOWN", 0)
+    @patch("crawl4md.crawler.AsyncWebCrawler")
+    def test_fail_content_not_created_without_writer(self, mock_crawler_cls, tmp_path: Path):
+        """No fail content files when no writer is provided."""
+        blocked_html = '<html><body>Request unsuccessful. Incapsula incident ID: 999</body></html>'
+        blocked_result = _make_mock_result("https://example.com/x", blocked_html, "blocked")
+
+        mock_instance = AsyncMock()
+        mock_instance.arun = AsyncMock(return_value=blocked_result)
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_crawler_cls.return_value = mock_instance
+
+        config = CrawlerConfig(urls=["https://example.com/x"], limit=1, max_retries=0)
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        crawler.crawl()
+
+        assert crawler.output_dir is not None
+        fail_files = list(crawler.output_dir.glob("*fail_content*"))
+        assert len(fail_files) == 0
+
+    @patch("crawl4md.crawler._ROUND_COOLDOWN", 0)
+    @patch("crawl4md.crawler.AsyncWebCrawler")
+    def test_fail_content_merged_across_rounds(self, mock_crawler_cls, tmp_path: Path):
+        """Fail content from multiple rounds is merged into final fail_content files."""
+        blocked_html = '<html><body>Request unsuccessful. Incapsula incident ID: 999</body></html>'
+        blocked_result = _make_mock_result("https://example.com/stuck", blocked_html, "still blocked")
+
+        mock_instance = AsyncMock()
+        mock_instance.arun = AsyncMock(return_value=blocked_result)
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_crawler_cls.return_value = mock_instance
+
+        from crawl4md.config import PageConfig
+
+        config = CrawlerConfig(urls=["https://example.com/stuck"], limit=1, max_retries=1, flush_interval=1)
+        page_config = PageConfig(extract_main_content=False)
+        extractor = ContentExtractor(page_config)
+        writer = FileWriter(max_file_size_mb=15.0)
+
+        crawler = SiteCrawler(config, page_config, output_base=tmp_path, extractor=extractor, writer=writer)
+        crawler.crawl()
+
+        assert crawler.output_dir is not None
+        # Per-round fail content files from both rounds
+        round1_fail = list(crawler.output_dir.glob("round_1_fail_content_*.txt"))
+        round2_fail = list(crawler.output_dir.glob("round_2_fail_content_*.txt"))
+        assert len(round1_fail) >= 1
+        assert len(round2_fail) >= 1
+        # Final merged fail content
+        final_fail = list(crawler.output_dir.glob("fail_content_*.txt"))
+        assert len(final_fail) >= 1
