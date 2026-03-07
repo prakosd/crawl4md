@@ -27,11 +27,12 @@ _ROUND_COOLDOWN = 30
 
 # Known WAF / bot-protection block signatures (matched case-insensitively)
 _BLOCK_SIGNATURES = (
-    "incapsula incident id",
+    "incapsula incident",
     "access denied</title>",
     "attention required! | cloudflare",
     "please turn javascript on and reload the page",
     "checking your browser before accessing",
+    "javascript is required",
 )
 
 
@@ -119,6 +120,7 @@ class SiteCrawler:
             browser_cfg=browser_cfg,
             run_cfg=run_cfg,
             discover_links=True,
+            round_prefix=round_prefix,
         )
         success, fail = self._split_results(round_results)
         self._save_url_lists(success, fail, round_prefix)
@@ -147,6 +149,7 @@ class SiteCrawler:
                 browser_cfg=browser_cfg,
                 run_cfg=run_cfg,
                 discover_links=False,
+                round_prefix=round_prefix,
             )
             success, fail = self._split_results(round_results)
             self._save_url_lists(success, fail, round_prefix)
@@ -180,6 +183,7 @@ class SiteCrawler:
         run_cfg: object,
         *,
         discover_links: bool = True,
+        round_prefix: str = "",
     ) -> list[CrawlResult]:
         """Crawl a list of URLs and return per-page results.
 
@@ -257,10 +261,12 @@ class SiteCrawler:
                     if page.markdown.strip():
                         self._writer.add(page)
 
-                # Flush content files periodically
+                # Flush content and URL lists periodically
                 if len(results) % self.config.flush_interval == 0:
                     if self._writer is not None:
                         self._writer.flush()
+                    success, fail = self._split_results(results)
+                    self._save_url_lists(success, fail, round_prefix)
 
                 # Throttle between pages — wide jitter mimics human browsing
                 if self.config.delay > 0:
@@ -276,6 +282,8 @@ class SiteCrawler:
                         if link not in generated:
                             generated.add(link)
                             queue.append((link, depth + 1))
+                    # Update progress total to reflect discovered pages
+                    progress.total = min(len(generated), self.config.limit)
 
         return results
 
