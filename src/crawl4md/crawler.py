@@ -182,6 +182,7 @@ class SiteCrawler:
         all_fail: list[CrawlResult] = []
         all_content_files: list[Path] = []
         all_fail_content_files: list[Path] = []
+        succeeded_urls: set[str] = set()  # URLs already crawled successfully
         total_rounds = 1 + self.config.max_retries  # round 1 + retries
 
         browser_cfg = BrowserConfig(
@@ -215,6 +216,7 @@ class SiteCrawler:
             fail_files = self._fail_writer.flush()
             all_fail_content_files.extend(fail_files)
         all_success.extend(success)
+        succeeded_urls.update(r.url for r in success)
         all_fail.extend(fail)
 
         # --- Retry rounds ---
@@ -242,6 +244,7 @@ class SiteCrawler:
                 round_prefix=round_prefix,
                 prior_success=len(all_success),
                 prior_fail=len(all_fail),
+                skip_urls=frozenset(succeeded_urls),
             )
             success, fail = self._split_results(round_results)
             self._save_url_lists(success, fail, round_prefix)
@@ -251,9 +254,15 @@ class SiteCrawler:
             if self._fail_writer is not None:
                 fail_files = self._fail_writer.flush()
                 all_fail_content_files.extend(fail_files)
-            all_success.extend(success)
-            all_fail = [r for r in all_fail if r.url not in {s.url for s in success}]
-            all_fail.extend(fail)
+            # Deduplicate: only add genuinely new successes
+            new_success = [r for r in success if r.url not in succeeded_urls]
+            all_success.extend(new_success)
+            succeeded_urls.update(r.url for r in new_success)
+            # Remove newly-succeeded URLs from all_fail; add new failures (skip dupes)
+            new_success_urls = {r.url for r in new_success}
+            all_fail = [r for r in all_fail if r.url not in new_success_urls]
+            existing_fail_urls = {r.url for r in all_fail}
+            all_fail.extend(r for r in fail if r.url not in existing_fail_urls)
             failed_urls = [r.url for r in fail]
 
         # --- Final merged files ---
@@ -286,15 +295,20 @@ class SiteCrawler:
         round_prefix: str = "",
         prior_success: int = 0,
         prior_fail: int = 0,
+        skip_urls: frozenset[str] = frozenset(),
     ) -> list[CrawlResult]:
         """Crawl a list of URLs and return per-page results.
 
         When *discover_links* is True (round 1), follow links up to
         ``max_depth``.  When False (retry rounds), only crawl the
         given URLs with no link discovery.
+
+        *skip_urls* contains URLs already successfully crawled in prior
+        rounds — they are pre-loaded into the visited set so they will
+        not be crawled again (including as redirect targets).
         """
         results: list[CrawlResult] = []
-        visited: set[str] = set()
+        visited: set[str] = set(skip_urls)
         generated: set[str] = set()
         queue: list[tuple[str, int]] = []
         for seed_url in urls:
@@ -463,15 +477,22 @@ class SiteCrawler:
         """Produce final merged output files."""
         assert self.output_dir is not None
 
-        # final_success_urls.txt — all successful URLs across all rounds
+        # final_success_urls.txt — all successful URLs across all rounds (deduplicated)
         if all_success:
+            seen: set[str] = set()
+            unique_urls: list[str] = []
+            for r in all_success:
+                if r.url not in seen:
+                    seen.add(r.url)
+                    unique_urls.append(r.url)
             path = self.output_dir / "final_success_urls.txt"
-            path.write_text("\n".join(r.url for r in all_success), encoding="utf-8")
+            path.write_text("\n".join(unique_urls), encoding="utf-8")
 
-        # final_fail_urls.txt — URLs that still failed after all retries
+        # final_fail_urls.txt — URLs that still failed after all retries (deduplicated)
         if remaining_fail_urls:
+            unique_fail = list(dict.fromkeys(remaining_fail_urls))
             path = self.output_dir / "final_fail_urls.txt"
-            path.write_text("\n".join(remaining_fail_urls), encoding="utf-8")
+            path.write_text("\n".join(unique_fail), encoding="utf-8")
 
         # Merge per-round content → final_success_content_001.ext, …
         if all_content_files:
@@ -502,11 +523,17 @@ class SiteCrawler:
         assert self.output_dir is not None
         ext = self.page_config.output_extension
 
-        # Sorted success content
+        # Sorted success content (deduplicated by URL, keeping first occurrence)
         if all_success and self._extractor is not None:
+            seen_urls: set[str] = set()
+            unique_success: list[CrawlResult] = []
+            for r in all_success:
+                if r.url not in seen_urls:
+                    seen_urls.add(r.url)
+                    unique_success.append(r)
             pages = [
                 self._extractor._extract_page(r)
-                for r in all_success
+                for r in unique_success
                 if r.markdown.strip()
             ]
             pages = [p for p in pages if p.markdown.strip()]
@@ -528,10 +555,16 @@ class SiteCrawler:
                     encoding="utf-8",
                 )
 
-        # Sorted fail content
+        # Sorted fail content (deduplicated by URL, keeping first occurrence)
         if all_fail:
-            fail_pages = []
+            seen_fail_urls: set[str] = set()
+            unique_fail: list[CrawlResult] = []
             for r in all_fail:
+                if r.url not in seen_fail_urls:
+                    seen_fail_urls.add(r.url)
+                    unique_fail.append(r)
+            fail_pages = []
+            for r in unique_fail:
                 raw_body = r.markdown.strip() or r.html.strip() or "(no response)"
                 fail_pages.append(ExtractedPage(
                     url=r.url,

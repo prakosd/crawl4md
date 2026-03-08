@@ -758,3 +758,83 @@ class TestPrintSummary:
         # Final merged fail content
         final_fail = list(crawler.output_dir.glob("final_fail_content_*.txt"))
         assert len(final_fail) >= 1
+
+    @patch("crawl4md.crawler._ROUND_COOLDOWN", 0)
+    @patch("crawl4md.crawler.AsyncWebCrawler")
+    def test_retry_skips_already_succeeded_url(self, mock_crawler_cls, tmp_path: Path):
+        """A retry round should not re-crawl a URL that already succeeded."""
+        url_a = "https://example.com/a"
+        url_b = "https://example.com/b"
+
+        # Round 1: A succeeds, B is blocked
+        result_a = _make_mock_result(url_a)
+        blocked_html = '<html><body>Request unsuccessful. Incapsula incident ID: 999</body></html>'
+        result_b_blocked = _make_mock_result(url_b, html=blocked_html, markdown="blocked")
+
+        # Round 2: B is retried, but redirects to A (already succeeded)
+        result_b_redirect = _make_mock_result(url_b, redirected_url=url_a)
+
+        mock_instance = AsyncMock()
+        mock_instance.arun = AsyncMock(side_effect=[result_a, result_b_blocked, result_b_redirect])
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_crawler_cls.return_value = mock_instance
+
+        config = CrawlerConfig(urls=[url_a, url_b], limit=10, max_retries=1)
+        crawler = SiteCrawler(config, output_base=tmp_path)
+        results = crawler.crawl()
+
+        # A should appear only once in the success results
+        success_urls = [r.url for r in results if r.success]
+        assert success_urls.count(url_a) == 1
+
+    @patch("crawl4md.crawler._ROUND_COOLDOWN", 0)
+    @patch("crawl4md.crawler.AsyncWebCrawler")
+    def test_final_sorted_files_no_duplicates(self, mock_crawler_cls, tmp_path: Path):
+        """Sorted final URL files should contain no duplicate URLs."""
+        url_a = "https://example.com/a"
+        url_b = "https://example.com/b"
+
+        # Round 1: A succeeds, B is blocked
+        result_a = _make_mock_result(url_a)
+        blocked_html = '<html><body>Request unsuccessful. Incapsula incident ID: 999</body></html>'
+        result_b_blocked = _make_mock_result(url_b, html=blocked_html, markdown="blocked")
+
+        # Round 2: B succeeds
+        result_b_ok = _make_mock_result(url_b)
+
+        mock_instance = AsyncMock()
+        mock_instance.arun = AsyncMock(side_effect=[result_a, result_b_blocked, result_b_ok])
+        mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+        mock_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_crawler_cls.return_value = mock_instance
+
+        from crawl4md.config import PageConfig
+
+        config = CrawlerConfig(urls=[url_a, url_b], limit=10, max_retries=1, flush_interval=1)
+        page_config = PageConfig(extract_main_content=False)
+        extractor = ContentExtractor(page_config)
+        writer = FileWriter(max_file_size_mb=15.0)
+
+        crawler = SiteCrawler(config, page_config, output_base=tmp_path, extractor=extractor, writer=writer)
+        crawler.crawl()
+
+        assert crawler.output_dir is not None
+
+        # Check sorted final success URLs have no duplicates
+        sorted_urls_path = crawler.output_dir / "sorted_final_success_urls.txt"
+        if sorted_urls_path.exists():
+            urls = sorted_urls_path.read_text(encoding="utf-8").strip().split("\n")
+            assert len(urls) == len(set(urls)), f"Duplicate URLs found: {[u for u in urls if urls.count(u) > 1]}"
+
+        # Check final success URLs have no duplicates
+        final_urls_path = crawler.output_dir / "final_success_urls.txt"
+        if final_urls_path.exists():
+            urls = final_urls_path.read_text(encoding="utf-8").strip().split("\n")
+            assert len(urls) == len(set(urls)), f"Duplicate URLs found: {[u for u in urls if urls.count(u) > 1]}"
+
+        # Check final fail URLs have no duplicates (if any)
+        final_fail_path = crawler.output_dir / "final_fail_urls.txt"
+        if final_fail_path.exists():
+            urls = final_fail_path.read_text(encoding="utf-8").strip().split("\n")
+            assert len(urls) == len(set(urls)), f"Duplicate fail URLs found: {[u for u in urls if urls.count(u) > 1]}"
