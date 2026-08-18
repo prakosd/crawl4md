@@ -120,7 +120,7 @@ STRINGS_EN: Strings = {
     "SEARCH_RESULTS_PANEL": ":material/leaderboard: Search results",
     "SEARCH_NO_RESULTS": "No matching chunks were found for this query.",
     "SEARCH_RESULTS_EMPTY": "Run a search to see matching chunks here.",
-    "SEARCH_META_HEADER": "Details",
+    "SEARCH_META_HEADER": ":material/info: Metadata",
     "SEARCH_META_CREATED": "Created",
     "SEARCH_META_MODEL": "Embedding model",
     "SEARCH_META_LANGUAGE": "Language",
@@ -153,7 +153,7 @@ STRINGS_EN: Strings = {
     "SEARCH_HISTORY_LABEL_RESULTS": "Results",
     "SEARCH_HISTORY_LABEL_INDEX_NAME": "Index name",
     "SEARCH_HISTORY_LABEL_INDEX_DATE": "Index date time",
-    "SEARCH_HISTORY_LABEL_DETAILS": "Details",
+    "SEARCH_HISTORY_LABEL_DETAILS": ":material/info: Metadata",
     "BASIC_QA_SECTION_HEADER": ":material/quiz: Ask & generate",
     "BASIC_QA_SECTION_CAPTION": (
         "Search your index for knowledge, assemble the prompt, and generate a grounded answer."
@@ -190,6 +190,21 @@ STRINGS_EN: Strings = {
     "BASIC_QA_MAXIMIZE_HELP": "Maximize the prompt editor",
     "BASIC_QA_MAXIMIZE_TITLE": "Edit prompt",
     "BASIC_QA_MAXIMIZE_APPLY": "Apply",
+    "BASIC_QA_EDIT_TEMPLATE_BUTTON": "Edit template",
+    "BASIC_QA_EDIT_TEMPLATE_HELP": (
+        "Edit the prompt template that Generate prompt fills in. Saved for this session."
+    ),
+    "BASIC_QA_EDIT_TEMPLATE_TITLE": "Edit prompt template",
+    "BASIC_QA_EDIT_TEMPLATE_CAPTION": (
+        "Keep the placeholders {question}, {start}, {knowledge}, {end}, and {tone}. "
+        "Saved for this session; Reset restores the default."
+    ),
+    "BASIC_QA_EDIT_TEMPLATE_SAVE": "Save",
+    "BASIC_QA_EDIT_TEMPLATE_RESET": "Reset to default",
+    "BASIC_QA_EDIT_TEMPLATE_INVALID": (
+        "Keep only the placeholders {question}, {start}, {knowledge}, {end}, and {tone} — "
+        "remove any other text in braces, then save again."
+    ),
     "BASIC_QA_NO_PROMPT_HINT": "Generate a prompt first, then send it.",
     "BASIC_QA_ANSWER_HEADER": ":material/smart_toy: Answer",
     "BASIC_QA_ANSWER_STATS": (
@@ -210,9 +225,9 @@ STRINGS_EN: Strings = {
     "BASIC_QA_HISTORY_UNPIN_HELP": "Unpin",
     "BASIC_QA_HISTORY_LABEL_QUESTION": "Question",
     "BASIC_QA_HISTORY_LABEL_TIME": "Time",
-    "BASIC_QA_HISTORY_DETAILS_EXPANDER": "Details",
-    "BASIC_QA_HISTORY_PROMPT_EXPANDER": "Prompt",
-    "BASIC_QA_HISTORY_ANSWER_EXPANDER": "Answer",
+    "BASIC_QA_HISTORY_DETAILS_EXPANDER": ":material/info: Metadata",
+    "BASIC_QA_HISTORY_PROMPT_EXPANDER": ":material/description: Prompt",
+    "BASIC_QA_HISTORY_ANSWER_EXPANDER": ":material/forum: Answer",
     "BASIC_QA_HISTORY_META_INDEX_NAME": "Index name",
     "BASIC_QA_HISTORY_META_INDEX_DATE": "Index date time",
     "BASIC_QA_HISTORY_META_MODEL": "Model",

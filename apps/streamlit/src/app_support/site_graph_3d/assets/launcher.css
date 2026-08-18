@@ -38,6 +38,10 @@
   cursor: not-allowed;
 }
 
+.sg-launch-btn--block {
+  width: 100%;
+}
+
 .sg-launch-btn svg {
   width: 1.15rem;
   height: 1.15rem;

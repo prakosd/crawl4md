@@ -14,12 +14,16 @@ from typing import Any
 from log4py import get_logger
 from rag_engine.prompts import RAG_PROMPT_TEMPLATE
 
-from app_support.basic_rag_qa.basic_rag_qa_history import BasicQaRecord
+from app_support.basic_rag_qa.basic_rag_qa_history import (
+    BasicQaRecord,
+    load_basic_rag_qa_template,
+)
 from app_support.settings import get_settings
 
 __all__ = [
     "TokenTotals",
     "apply_maximized_prompt",
+    "basic_rag_qa_template_is_valid",
     "resolve_basic_rag_qa_prompt_template",
     "token_totals",
     "tone_choices",
@@ -32,19 +36,25 @@ _TONE_ORDER = tuple(
     tone.strip() for tone in _settings.basic_rag_qa_tones.split(",") if tone.strip()
 )
 _DEFAULT_TONE = _settings.basic_rag_qa_default_tone
-# basic_rag_qa_form_ui.py lives at apps/streamlit/src/app_support/; the repo root is
-# four parents up (mirrors settings.py) and the template path resolves against it.
-_REPO_ROOT = Path(__file__).resolve().parents[4]
+# basic_rag_qa_form_ui.py lives at apps/streamlit/src/app_support/basic_rag_qa/; the
+# repo root is five parents up (one deeper than settings.py) and the template path
+# resolves against it.
+_REPO_ROOT = Path(__file__).resolve().parents[5]
 
 
-def resolve_basic_rag_qa_prompt_template() -> str:
-    """Return the Step 4 prompt template from the configured file.
+def resolve_basic_rag_qa_prompt_template(session_root: Path | str | None = None) -> str:
+    """Return the Step 4 prompt template.
 
-    Reads the file named by ``BASIC_RAG_QA_PROMPT_TEMPLATE_FILE`` (resolved against the
-    repo root) so an operator can reword the generated prompt without a code
-    change. Falls back to the built-in ``RAG_PROMPT_TEMPLATE`` when the file is
-    missing, empty, or unreadable, so a bad path never breaks generation.
+    Precedence: a template the user saved for this session (via Edit template) →
+    the configured ``BASIC_RAG_QA_PROMPT_TEMPLATE_FILE`` (resolved against the repo
+    root, so an operator can reword the default without a code change) → the
+    built-in ``RAG_PROMPT_TEMPLATE``. A missing/empty/unreadable source falls
+    through to the next, so a bad path never breaks generation.
     """
+    if session_root is not None:
+        saved = load_basic_rag_qa_template(session_root)
+        if saved is not None:
+            return saved
     path = _REPO_ROOT / _settings.basic_rag_qa_prompt_template_file
     try:
         text = path.read_text(encoding="utf-8")
@@ -59,6 +69,20 @@ def resolve_basic_rag_qa_prompt_template() -> str:
         )
         return RAG_PROMPT_TEMPLATE
     return text
+
+
+def basic_rag_qa_template_is_valid(template: str) -> bool:
+    """Return True when *template* has only the fields ``build_rag_prompt`` fills.
+
+    Mirrors ``build_rag_prompt``'s ``str.format`` contract: an unknown ``{field}``
+    or a stray brace raises, so the editor can reject a template that would
+    otherwise silently fall back to the default.
+    """
+    try:
+        template.format(question="", start="", knowledge="", end="", tone="")
+    except (KeyError, IndexError, ValueError):
+        return False
+    return True
 
 
 def apply_maximized_prompt(

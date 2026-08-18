@@ -234,12 +234,15 @@ def _render_search_history(
         for position, record in enumerate(records):
             ref = find_index(indexes, record.index_folder, record.index_run)
             with st.container(border=True):
-                head, pin_col, replay_col = st.columns([0.8, 0.1, 0.1], vertical_alignment="center")
+                head, actions = st.columns([0.8, 0.2], vertical_alignment="center")
                 head.markdown(
                     stacked_label_value_html(strings["SEARCH_HISTORY_LABEL_QUERY"], record.query),
                     unsafe_allow_html=True,
                 )
-                with pin_col:
+                with (
+                    actions,
+                    st.container(horizontal=True, horizontal_alignment="right", gap="small"),
+                ):
                     pin_help = (
                         strings["SEARCH_HISTORY_UNPIN_HELP"]
                         if record.pinned
@@ -249,10 +252,10 @@ def _render_search_history(
                         ":material/keep_off:" if record.pinned else ":material/keep:",
                         key=f"search_history_pin_{position}",
                         help=pin_help,
+                        type="primary" if record.pinned else "secondary",
                     ):
                         set_search_pinned(session_root, record.timestamp_utc, not record.pinned)
                         st.rerun()
-                with replay_col:
                     if st.button(
                         ":material/replay:",
                         key=f"search_history_replay_{position}",

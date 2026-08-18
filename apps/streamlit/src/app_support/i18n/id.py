@@ -123,7 +123,7 @@ STRINGS_ID: Strings = {
     "SEARCH_RESULTS_PANEL": ":material/leaderboard: Hasil pencarian",
     "SEARCH_NO_RESULTS": "Tidak ada chunk yang cocok untuk kueri ini.",
     "SEARCH_RESULTS_EMPTY": "Jalankan pencarian untuk melihat chunk yang cocok di sini.",
-    "SEARCH_META_HEADER": "Detail",
+    "SEARCH_META_HEADER": ":material/info: Metadata",
     "SEARCH_META_CREATED": "Dibuat",
     "SEARCH_META_MODEL": "Model embedding",
     "SEARCH_META_LANGUAGE": "Bahasa",
@@ -157,7 +157,7 @@ STRINGS_ID: Strings = {
     "SEARCH_HISTORY_LABEL_RESULTS": "Hasil",
     "SEARCH_HISTORY_LABEL_INDEX_NAME": "Nama indeks",
     "SEARCH_HISTORY_LABEL_INDEX_DATE": "Tanggal waktu indeks",
-    "SEARCH_HISTORY_LABEL_DETAILS": "Detail",
+    "SEARCH_HISTORY_LABEL_DETAILS": ":material/info: Metadata",
     "BASIC_QA_SECTION_HEADER": ":material/quiz: Tanya & hasilkan",
     "BASIC_QA_SECTION_CAPTION": (
         "Cari pengetahuan di indeks Anda, susun prompt, dan hasilkan jawaban yang "
@@ -196,6 +196,21 @@ STRINGS_ID: Strings = {
     "BASIC_QA_MAXIMIZE_HELP": "Perbesar editor prompt",
     "BASIC_QA_MAXIMIZE_TITLE": "Sunting prompt",
     "BASIC_QA_MAXIMIZE_APPLY": "Terapkan",
+    "BASIC_QA_EDIT_TEMPLATE_BUTTON": "Sunting templat",
+    "BASIC_QA_EDIT_TEMPLATE_HELP": (
+        "Sunting templat prompt yang diisi oleh Hasilkan prompt. Disimpan untuk sesi ini."
+    ),
+    "BASIC_QA_EDIT_TEMPLATE_TITLE": "Sunting templat prompt",
+    "BASIC_QA_EDIT_TEMPLATE_CAPTION": (
+        "Pertahankan placeholder {question}, {start}, {knowledge}, {end}, dan {tone}. "
+        "Disimpan untuk sesi ini; Atur ulang mengembalikan default."
+    ),
+    "BASIC_QA_EDIT_TEMPLATE_SAVE": "Simpan",
+    "BASIC_QA_EDIT_TEMPLATE_RESET": "Atur ulang ke default",
+    "BASIC_QA_EDIT_TEMPLATE_INVALID": (
+        "Pertahankan hanya placeholder {question}, {start}, {knowledge}, {end}, dan {tone} — "
+        "hapus teks lain dalam kurung kurawal, lalu simpan lagi."
+    ),
     "BASIC_QA_NO_PROMPT_HINT": "Hasilkan prompt terlebih dahulu, lalu kirim.",
     "BASIC_QA_ANSWER_HEADER": ":material/smart_toy: Jawaban",
     "BASIC_QA_ANSWER_STATS": (
@@ -216,9 +231,9 @@ STRINGS_ID: Strings = {
     "BASIC_QA_HISTORY_UNPIN_HELP": "Lepas sematan",
     "BASIC_QA_HISTORY_LABEL_QUESTION": "Pertanyaan",
     "BASIC_QA_HISTORY_LABEL_TIME": "Waktu",
-    "BASIC_QA_HISTORY_DETAILS_EXPANDER": "Detail",
-    "BASIC_QA_HISTORY_PROMPT_EXPANDER": "Prompt",
-    "BASIC_QA_HISTORY_ANSWER_EXPANDER": "Jawaban",
+    "BASIC_QA_HISTORY_DETAILS_EXPANDER": ":material/info: Metadata",
+    "BASIC_QA_HISTORY_PROMPT_EXPANDER": ":material/description: Prompt",
+    "BASIC_QA_HISTORY_ANSWER_EXPANDER": ":material/forum: Jawaban",
     "BASIC_QA_HISTORY_META_INDEX_NAME": "Nama indeks",
     "BASIC_QA_HISTORY_META_INDEX_DATE": "Tanggal waktu indeks",
     "BASIC_QA_HISTORY_META_MODEL": "Model",

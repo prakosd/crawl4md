@@ -86,6 +86,60 @@ def test_child_count_reflects_discovered_children() -> None:
     assert _node_by_id(model, "https://x.com/a")["child_count"] == 0
 
 
+# Risk: the 3D layout sizes each node's cluster by its subtree weight, so
+# descendant_count must sum ALL resolvable descendants (recursive), not just direct
+# children. Verify a two-level tree. Type: unit.
+def test_descendant_count_sums_whole_subtree() -> None:
+    model = build_site_graph_model(
+        _jsonl(
+            {
+                "url": "https://x.com",
+                "discovered_from": None,
+                "page_size_kb": 5.0,
+                "status": "success",
+                "depth": 0,
+                "round_num": 1,
+            },
+            {
+                "url": "https://x.com/a",
+                "discovered_from": "https://x.com",
+                "page_size_kb": 1.0,
+                "status": "success",
+                "depth": 1,
+                "round_num": 1,
+            },
+            {
+                "url": "https://x.com/b",
+                "discovered_from": "https://x.com",
+                "page_size_kb": 1.0,
+                "status": "success",
+                "depth": 1,
+                "round_num": 1,
+            },
+            {
+                "url": "https://x.com/a/1",
+                "discovered_from": "https://x.com/a",
+                "page_size_kb": 1.0,
+                "status": "success",
+                "depth": 2,
+                "round_num": 1,
+            },
+            {
+                "url": "https://x.com/a/2",
+                "discovered_from": "https://x.com/a",
+                "page_size_kb": 1.0,
+                "status": "success",
+                "depth": 2,
+                "round_num": 1,
+            },
+        )
+    )
+    assert _node_by_id(model, "https://x.com")["descendant_count"] == 4
+    assert _node_by_id(model, "https://x.com/a")["descendant_count"] == 2
+    assert _node_by_id(model, "https://x.com/b")["descendant_count"] == 0
+    assert _node_by_id(model, "https://x.com/a/1")["descendant_count"] == 0
+
+
 # Risk: planet size must scale with page weight. Verify min-max normalisation
 # maps the smallest present page to 0, the largest to 1, and the middle between.
 # Type: unit.
@@ -549,3 +603,43 @@ def test_build_viewer_html_injects_texture_cdn_base() -> None:
     )
     assert f'window.__TEXTURE_BASE__ = "{TEXTURE_CDN_BASE}"' in html
     assert "window.https://" not in html  # global name not clobbered by the replace
+
+
+# Risk: the Controls panel must open collapsed so it does not cover the scene on
+# first load. Verify the assembled shell marks the help panel collapsed. Type: unit.
+def test_build_viewer_html_controls_start_collapsed() -> None:
+    html = build_viewer_html(
+        _jsonl(
+            {
+                "url": "https://x.com",
+                "discovered_from": None,
+                "page_size_kb": 1.0,
+                "status": "success",
+                "depth": 0,
+                "round_num": 1,
+            }
+        ),
+        {},
+    )
+    assert 'id="sg-help" class="sg-panel" data-collapsed="true"' in html
+
+
+# Risk: the <h1> paints before the module script localizes it, so a stale "Crawl
+# universe" fallback flashes before "Site Orrery". Verify the shell ships the final
+# title so there is no swap. Type: unit.
+def test_build_viewer_html_title_has_no_placeholder_flash() -> None:
+    html = build_viewer_html(
+        _jsonl(
+            {
+                "url": "https://x.com",
+                "discovered_from": None,
+                "page_size_kb": 1.0,
+                "status": "success",
+                "depth": 0,
+                "round_num": 1,
+            }
+        ),
+        {},
+    )
+    assert '<h1 id="sg-title">Site Orrery</h1>' in html
+    assert "Crawl universe" not in html

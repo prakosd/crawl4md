@@ -522,6 +522,41 @@ def find_site_graph_file(node: Mapping[str, Any]) -> GeneratedFile | None:
     return None
 
 
+def find_site_graph_for_result(
+    session_root: Path | str,
+    relative_path: str,
+    *,
+    download_limit_bytes: int = _DEFAULT_DOWNLOAD_LIMIT_BYTES,
+) -> GeneratedFile | None:
+    """Return the ``site_graph.jsonl`` for a ready download's crawl run, if any.
+
+    A ready result's *relative_path* starts with ``<crawl_folder>/<timestamp>/``; the
+    run's site graph lives at ``<crawl_folder>/<timestamp>/logs/site_graph.jsonl``.
+    Returns ``None`` when the run predates site graphs or the path escapes the root,
+    so the ready-result panel offers "Explore in 3D" only when it applies.
+    """
+    root = Path(session_root).resolve()
+    parts = PurePosixPath(relative_path).parts
+    if len(parts) < 2:
+        return None
+    try:
+        candidate = ensure_within_root(
+            root, root / parts[0] / parts[1] / _LOGS_DIR_NAME / _SITE_GRAPH_FILENAME
+        )
+        stat = candidate.stat()
+    except (OSError, ValueError):
+        return None
+    return GeneratedFile(
+        path=candidate,
+        relative_path=candidate.relative_to(root).as_posix(),
+        name=candidate.name,
+        size_bytes=stat.st_size,
+        modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+        file_type=candidate.suffix.lower().lstrip(".") or "file",
+        download_allowed=stat.st_size <= download_limit_bytes,
+    )
+
+
 def files_excluding(files: list[GeneratedFile], relative_path: str | None) -> list[GeneratedFile]:
     """Return *files* without the entry at *relative_path* (``None`` keeps all).
 

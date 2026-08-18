@@ -6,7 +6,11 @@ from app_support.basic_rag_qa.basic_rag_qa_history import (
     BASIC_QA_HISTORY_DIRNAME,
     BasicQaRecord,
     append_basic_rag_qa_record,
+    basic_rag_qa_template_path,
     load_basic_rag_qa_history,
+    load_basic_rag_qa_template,
+    reset_basic_rag_qa_template,
+    save_basic_rag_qa_template,
     set_basic_rag_qa_pinned,
 )
 
@@ -91,3 +95,36 @@ def test_load_skips_malformed_lines(tmp_path: Path) -> None:
 
 def test_load_empty_when_no_history(tmp_path: Path) -> None:
     assert load_basic_rag_qa_history(tmp_path) == []
+
+
+# Risk: the Edit-template editor persists a per-session template; Generate must
+# read back exactly what was saved. Verify the round trip + it lands in the
+# history folder (so it shows in Files & folders). Type: unit.
+def test_template_save_load_round_trip(tmp_path: Path) -> None:
+    template = "You are X. {question} {start}{knowledge}{end} {tone}"
+    assert load_basic_rag_qa_template(tmp_path) is None
+
+    save_basic_rag_qa_template(tmp_path, template)
+
+    assert load_basic_rag_qa_template(tmp_path) == template
+    assert (tmp_path / BASIC_QA_HISTORY_DIRNAME / "prompt_template.txt").is_file()
+
+
+# Risk: Reset to default must drop the saved template so the default returns, and
+# must not error when nothing is saved. Type: unit.
+def test_template_reset_removes_saved(tmp_path: Path) -> None:
+    save_basic_rag_qa_template(tmp_path, "custom {question}{start}{knowledge}{end}{tone}")
+
+    reset_basic_rag_qa_template(tmp_path)
+
+    assert load_basic_rag_qa_template(tmp_path) is None
+    reset_basic_rag_qa_template(tmp_path)  # idempotent when already absent
+
+
+# Risk: a whitespace-only saved template would blank the prompt; loading must treat
+# it as unset so the default applies. Type: unit.
+def test_template_blank_saved_reads_as_none(tmp_path: Path) -> None:
+    save_basic_rag_qa_template(tmp_path, "   \n")
+
+    assert load_basic_rag_qa_template(tmp_path) is None
+    assert basic_rag_qa_template_path(tmp_path).exists()

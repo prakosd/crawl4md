@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import mimetypes
 from collections.abc import Mapping
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -53,6 +54,7 @@ from app_support.generated_files import (
     download_tree_entry_sort_key,
     files_excluding,
     find_site_graph_file,
+    find_site_graph_for_result,
     format_file_size,
     generated_files_cache_token,
     import_signed_zip,
@@ -496,10 +498,10 @@ def _render_ready_result_panel() -> None:
             download_limit_bytes=_DOWNLOAD_LIMIT_BYTES,
         )
     if ready is not None:
-        _render_ready_result(ready, strings)
+        _render_ready_result(ready, strings, session_root)
 
 
-def _render_ready_result(ready: ReadyDownload, strings: dict[str, Any]) -> None:
+def _render_ready_result(ready: ReadyDownload, strings: dict[str, Any], session_root: Path) -> None:
     is_zip = ready.file.file_type == "zip"
     subtitle = (
         strings["READY_RESULT_ZIP_SUBTITLE"].format(count=ready.source_count)
@@ -529,14 +531,27 @@ def _render_ready_result(ready: ReadyDownload, strings: dict[str, Any]) -> None:
     except OSError:
         return
     mime_type = mimetypes.guess_type(download_name)[0] or "application/octet-stream"
-    st.download_button(
-        label=strings["READY_RESULT_DOWNLOAD_BUTTON"],
-        data=file_bytes,
-        file_name=download_name,
-        mime=mime_type,
-        key=f"ready_result_{st.session_state.session_id}_{st.session_state.get('crawl_id', '')}",
-        width="stretch",
-    )
+    # With a site graph, put Download and Explore in 3D side by side (50/50);
+    # otherwise Download spans the full width on its own.
+    site_graph = find_site_graph_for_result(session_root, ready.file.relative_path)
+    download_col: Any = nullcontext()
+    explore_col = None
+    if site_graph is not None:
+        download_col, explore_col = st.columns(2, vertical_alignment="center")
+    with download_col:
+        st.download_button(
+            label=strings["READY_RESULT_DOWNLOAD_BUTTON"],
+            data=file_bytes,
+            file_name=download_name,
+            mime=mime_type,
+            key=f"ready_result_{st.session_state.session_id}_{st.session_state.get('crawl_id', '')}",
+            width="stretch",
+        )
+    if explore_col is not None:
+        with explore_col:
+            render_explore_3d_button(
+                site_graph, disabled=_files_actions_busy(), key_suffix="ready", full_width=True
+            )
 
 
 def _render_open_preview_dialog(files: list[GeneratedFile]) -> None:

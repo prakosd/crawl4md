@@ -101,6 +101,7 @@ def _parse_records(jsonl_text: str) -> list[dict[str, Any]]:
 def _build_nodes(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     known_urls = {str(record[_KEY_URL]) for record in records}
     child_counts = _count_children(records, known_urls)
+    descendant_counts = _count_descendants(records, known_urls)
     size_scales = _size_scales(records)
     max_children = max(child_counts.values(), default=0)
 
@@ -126,6 +127,7 @@ def _build_nodes(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "round_num": round_num,
                 "page_size_kb": _coerce_float(record.get(_KEY_PAGE_SIZE_KB)),
                 "child_count": child_count,
+                "descendant_count": descendant_counts.get(url, 0),
                 "size_scale": _round(size_scale),
                 "richness": richness,
                 "is_root": discovered_from is None,
@@ -144,6 +146,37 @@ def _count_children(records: list[dict[str, Any]], known_urls: set[str]) -> dict
         parent = _clean_parent(record.get(_KEY_DISCOVERED_FROM))
         if parent is not None and parent in known_urls:
             counts[parent] = counts.get(parent, 0) + 1
+    return counts
+
+
+def _count_descendants(records: list[dict[str, Any]], known_urls: set[str]) -> dict[str, int]:
+    """Count all resolvable descendants under each page (recursive subtree size).
+
+    Drives the 3D layout: a page with a large subtree pushes its children out into
+    their own cluster. Single-parent crawl graphs are forests, but a defensive
+    visiting set still guards against a stray discovered-from cycle.
+    """
+    children: dict[str, list[str]] = {}
+    for record in records:
+        url = str(record[_KEY_URL])
+        parent = _clean_parent(record.get(_KEY_DISCOVERED_FROM))
+        if parent is not None and parent in known_urls and parent != url:
+            children.setdefault(parent, []).append(url)
+    counts: dict[str, int] = {}
+
+    def subtree(url: str, visiting: set[str]) -> int:
+        if url in counts:
+            return counts[url]
+        if url in visiting:
+            return 0
+        visiting.add(url)
+        total = sum(1 + subtree(child, visiting) for child in children.get(url, ()))
+        visiting.discard(url)
+        counts[url] = total
+        return total
+
+    for url in known_urls:
+        subtree(url, set())
     return counts
 
 

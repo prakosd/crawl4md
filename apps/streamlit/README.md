@@ -46,7 +46,7 @@ flowchart TD
 | `focus.py` | Client-side focus helpers: `focus_widget` (focus a keyed input after a rerun, e.g., after a history replay) and `entered_page` (tracks page navigation) |
 | `generated_files.py` | Output listing, previews, downloads (labels include human-readable file sizes), and per-file deletion |
 | `downloads_ui.py` | Output Files panel renderer: download tree, per-file preview/download, per-folder zip export + delete, signed-zip import, ready-result panel |
-| `site_graph_3d/` | "Explore in 3D" viewer: pure `graph_data` (`site_graph.jsonl` → node/edge model), `viewer_assembler` (self-contained Three.js HTML), `viewer_labels` (EN/ID), and `launcher.py` (inline CCv2 button that opens the viewer in a new tab) |
+| `site_graph_3d/` | "Explore in 3D" viewer: pure `graph_data` (`site_graph.jsonl` → node/edge model), `viewer_assembler` (self-contained Three.js HTML), `viewer_labels` (EN/ID), `static_publish` (writes the viewer under `static/orrery/` for a refreshable `app/static` URL), and `launcher.py` (inline CCv2 button that opens the published viewer in a new tab) |
 | `progress_ui.py` | Crawl + vector-index live-area renderers: status boxes, cumulative charts, active/next URL rows, timing, activity log, vector-index status |
 | `pages.py` | Pure navigation metadata for the crawl-to-RAG workflow pages |
 | `session_manager.py` | Safe IDs, session records, paths, and cleanup |
@@ -119,8 +119,8 @@ Streamlit UI modules for individual workflow steps. These files may import Strea
 | --- | --- |
 | `crawl4md.py` | Step 1 crawler content area; receives shell callbacks through `CrawlPageContext` |
 | `vector_index.py` | Step 2 vector-index content area; receives shell callbacks through `VectorIndexPageContext` |
-| `semantic_search.py` | Step 3 semantic search — carded index picker + `manifest.json` metadata grid (Created shown in local time), a query form with a top-N input (plain closest-match search), an always-present collapsible **Search results** panel (a neutral title + hint when empty; id/size/language caption under the title, right-docked similarity text + Raw/Preview tabs; persists across reruns, opens on a new search), a **Search history** card list (per-session log; each card leads with the query + a pin toggle & replay and a collapsed **Details** 4-column grid of searched / results / index name / index date time and the broken-out index fields; pinned cards sort first; replay restores query + Vector DB and focuses the query), and Output Files (`rag_engine.retrieve`) |
-| `basic_rag_qa.py` | Step 4 Basic RAG Q&A — index/model/tone/top-results panel, question → **Generate prompt** (`retrieve` + `build_rag_prompt`, template from `BASIC_RAG_QA_PROMPT_TEMPLATE_FILE` via `basic_rag_qa_form_ui.resolve_basic_rag_qa_prompt_template`; retrieved hits render in an always-present **Search results** panel between the question and prompt via the shared `render_results_panel` (collapsed, titled with the match count)), editable prompt with an icon-only **Maximize** full-screen dialog with an **Apply** button that writes edits back (dismiss discards; via `basic_rag_qa_form_ui.apply_maximized_prompt`) → **Send** (`stream_prompt`, streamed answer shown in an **Answer** panel inside the prompt form under the button + token/latency stats naming the model as `Model — …`), per-session prompt history (cards with a **Details** grid, a collapsed **Prompt** expander, and a collapsed **Answer** expander with the model/token/latency caption; replay reloads question + prompt + options) and a session token summary above it |
+| `semantic_search.py` | Step 3 semantic search — carded index picker + `manifest.json` metadata grid (Created shown in local time), a query form with a top-N input (plain closest-match search), an always-present collapsible **Search results** panel (a neutral title + hint when empty; id/size/language caption under the title, right-docked similarity text + Raw/Preview tabs; persists across reruns, opens on a new search), a **Search history** card list (per-session log; each card leads with the query + a pin toggle & replay and a collapsed **:material/info: Metadata** 4-column grid of searched / results / index name / index date time and the broken-out index fields; pinned cards sort first; replay restores query + Vector DB and focuses the query), and Output Files (`rag_engine.retrieve`) |
+| `basic_rag_qa.py` | Step 4 Basic RAG Q&A — index/model/tone/top-results panel, question → **Generate prompt** (`retrieve` + `build_rag_prompt`, template via `basic_rag_qa_form_ui.resolve_basic_rag_qa_prompt_template(session_root)` — a per-session template saved from **Edit template** → `BASIC_RAG_QA_PROMPT_TEMPLATE_FILE` (a customer-service persona by default) → the built-in default; retrieved hits render in an always-present **Search results** panel between the question and prompt via the shared `render_results_panel` (collapsed, titled with the match count)), editable prompt with an icon-only **Maximize** full-screen dialog with an **Apply** button that writes edits back (dismiss discards; via `basic_rag_qa_form_ui.apply_maximized_prompt`), an **Edit template** editor that saves a per-session prompt template (placeholders validated; `save_`/`reset_basic_rag_qa_template`) → **Send** (`stream_prompt`, streamed answer shown in an **Answer** panel inside the prompt form under the button + token/latency stats naming the model as `Model — …`), per-session prompt history (cards with a **:material/info: Metadata** grid, a collapsed **:material/description: Prompt** expander, and a collapsed **:material/forum: Answer** expander with the model/token/latency caption; replay reloads question + prompt + options) and a session token summary above it |
 | `conversational_rag.py` | Step 5 conversational RAG — chat UI with in-session history and history-aware rewriting (`rag_engine.chat_answer`) |
 
 When a page grows complex, keep page-specific state keys prefixed with the page id and move reusable non-UI logic into `src/app_support/` or the core `crawl4md` package instead of importing from `streamlit_app.py`.
@@ -359,19 +359,26 @@ for a single download. For the full file reference (purposes, naming conventions
 behavior), see [Output Structure](../../README.md#output-structure) in the root README.
 
 **Exploring a crawl in 3D.** Each `crawl_*` folder's action row carries a second control —
-**:material/bubble_chart: Explore in 3D**, sitting right of its **Export** button — that opens an
-interactive Three.js "universe" of the crawl in a new browser tab: one planet per page (sized by
+**:material/bubble_chart: Explore in 3D**, sitting right of its **Export** button — and the
+**📦 Crawl results ready** panel offers the same control beside its **Download** button (split 50/50).
+Either opens an interactive Three.js "universe" of the crawl in a new browser tab: one planet per page (sized by
 page weight, surfaced by information richness, coloured by crawl status, ringed when large), the
-seed page as a central sun, and dim orbit-links to the page each was discovered from. Hovering a
+seed page as a central sun, each page's children orbiting that page (a nested orrery) so busy pages
+fling their sub-pages out into their own separated clusters, and dim orbit-links to the page each was
+discovered from. Hovering a
 planet shows its details and lights the link chain back to the root; clicking opens a side panel
 with the full record and a live preview of the page (with an "open in a new tab" fallback for sites
 that block embedding). Ambient motion (planet orbits and spin, starfield drift, and a slow camera
 auto-revolve) plays only while the viewer is idle and eases in/out, so grabbing the scene calms it
-and it gently resumes about ten seconds after the last interaction. The viewer is a self-contained
-page assembled client-side — the crawler and libraries are untouched. Backend logic lives in the
-pure `app_support/site_graph_3d/` package (`graph_data`, `viewer_assembler`, `viewer_labels`);
-`launcher.py` mounts the inline CCv2 component. three.js loads from a pinned CDN, so the new tab
-needs internet access.
+and it gently resumes about ten seconds after the last interaction. The viewer opens with its
+**Controls** panel collapsed and is a self-contained page, published as a static file
+(`app_support/site_graph_3d/static_publish`) under `static/orrery/<session>/` and served at the
+`app/static` URL (`server.enableStaticServing`), so the tab is **refreshable and shareable** — the
+crawler and libraries are untouched. Backend logic lives in the pure `app_support/site_graph_3d/`
+package (`graph_data`, `viewer_assembler`, `viewer_labels`, `static_publish`); `launcher.py` mounts
+the inline CCv2 component. Published files are namespaced by session id and pruned with their session
+(readable by anyone with the link); three.js loads from a pinned CDN, so the new tab needs internet
+access.
 
 **Downloading a folder as a zip.** Each top-level `crawl_*`/`vector_*` run folder — plus the fixed
 `search_history` and `basic_rag_qa_history` folders — carries an **Export** button (the

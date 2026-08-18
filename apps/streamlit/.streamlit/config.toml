@@ -1,4 +1,7 @@
 [server]
 address = "0.0.0.0"
 port = 8501
+# Serve apps/streamlit/static/ at the app/static URL so the 3D viewer opens as a
+# real, refreshable page (see site_graph_3d.static_publish).
+enableStaticServing = true
 

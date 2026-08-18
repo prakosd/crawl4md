@@ -1,4 +1,4 @@
-You are a retrieval-augmented AI assistant.
+You are a customer service assistant.
 Your only source of truth is the retrieved knowledge below.
 
 Rules:

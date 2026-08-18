@@ -9,12 +9,16 @@ from app_support.basic_rag_qa import basic_rag_qa_form_ui
 from app_support.basic_rag_qa.basic_rag_qa_form_ui import (
     TokenTotals,
     apply_maximized_prompt,
+    basic_rag_qa_template_is_valid,
     resolve_basic_rag_qa_prompt_template,
     token_totals,
     tone_choices,
     usage_percent,
 )
-from app_support.basic_rag_qa.basic_rag_qa_history import BasicQaRecord
+from app_support.basic_rag_qa.basic_rag_qa_history import (
+    BasicQaRecord,
+    save_basic_rag_qa_template,
+)
 
 
 def test_tone_choices_defaults_to_neutral() -> None:
@@ -24,10 +28,16 @@ def test_tone_choices_defaults_to_neutral() -> None:
     assert tones[index] == "Neutral"
 
 
-def test_shipped_prompt_template_file_matches_builtin_default() -> None:
-    # The committed template file must reproduce the built-in default so the
-    # deployed prompt is unchanged until an operator edits the file.
-    assert resolve_basic_rag_qa_prompt_template() == RAG_PROMPT_TEMPLATE
+def test_shipped_prompt_template_uses_customer_service_persona() -> None:
+    # The committed template customizes the persona (customer service) while keeping
+    # the grounding contract, so it deliberately diverges from the generic library
+    # default but retains the placeholders and the answer-only-from-knowledge rule.
+    template = resolve_basic_rag_qa_prompt_template()
+    assert template.startswith("You are a customer service assistant")
+    assert template != RAG_PROMPT_TEMPLATE
+    for field in ("{question}", "{start}", "{knowledge}", "{end}", "{tone}"):
+        assert field in template
+    assert "ONLY the retrieved knowledge" in template
 
 
 def test_resolve_prompt_template_returns_file_contents(
@@ -64,6 +74,46 @@ def test_resolve_prompt_template_falls_back_when_empty(
     )
 
     assert resolve_basic_rag_qa_prompt_template() == RAG_PROMPT_TEMPLATE
+
+
+def test_resolve_prompt_template_prefers_session_saved(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A template the user saved for this session wins over the configured file.
+    monkeypatch.setattr(basic_rag_qa_form_ui, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(
+        basic_rag_qa_form_ui._settings, "basic_rag_qa_prompt_template_file", "cfg.txt"
+    )
+    (tmp_path / "cfg.txt").write_text(
+        "config {question}{start}{knowledge}{end}{tone}", encoding="utf-8"
+    )
+    save_basic_rag_qa_template(tmp_path, "session {question}{start}{knowledge}{end}{tone}")
+
+    assert resolve_basic_rag_qa_prompt_template(tmp_path).startswith("session ")
+
+
+def test_resolve_prompt_template_uses_config_without_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(basic_rag_qa_form_ui, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(
+        basic_rag_qa_form_ui._settings, "basic_rag_qa_prompt_template_file", "cfg.txt"
+    )
+    (tmp_path / "cfg.txt").write_text(
+        "config {question}{start}{knowledge}{end}{tone}", encoding="utf-8"
+    )
+
+    # No session template saved -> the configured file is used.
+    assert resolve_basic_rag_qa_prompt_template(tmp_path).startswith("config ")
+
+
+def test_template_is_valid_accepts_the_expected_fields() -> None:
+    assert basic_rag_qa_template_is_valid("{question} {start}{knowledge}{end} {tone}") is True
+
+
+def test_template_is_valid_rejects_unknown_or_stray_braces() -> None:
+    assert basic_rag_qa_template_is_valid("hello {oops} {question}") is False
+    assert basic_rag_qa_template_is_valid("stray { brace") is False
 
 
 def test_apply_maximized_prompt_copies_source_to_target() -> None:

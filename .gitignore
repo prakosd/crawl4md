@@ -29,6 +29,9 @@ outputs/
 *.log
 apps/streamlit/logs/
 
+# Published 3D site-orrery viewers (generated on demand, served as static files)
+apps/streamlit/static/
+
 # Allow checking in fixture data for reproducible RAG testing
 !data/
 !data/**

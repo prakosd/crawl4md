@@ -31,6 +31,7 @@ from rag_engine.models import TokenUsage
 
 from app_support.basic_rag_qa.basic_rag_qa_form_ui import (
     apply_maximized_prompt,
+    basic_rag_qa_template_is_valid,
     resolve_basic_rag_qa_prompt_template,
     token_totals,
     tone_choices,
@@ -40,6 +41,8 @@ from app_support.basic_rag_qa.basic_rag_qa_history import (
     BasicQaRecord,
     append_basic_rag_qa_record,
     load_basic_rag_qa_history,
+    reset_basic_rag_qa_template,
+    save_basic_rag_qa_template,
     set_basic_rag_qa_pinned,
 )
 from app_support.focus import focus_widget
@@ -76,12 +79,20 @@ _PROMPT_FIELD_HEIGHT = 260
 _MAXIMIZE_PROMPT_HEIGHT = 560
 _MAXIMIZE_DIALOG_SCOPE_CLASS = "basic-rag-qa-maximize-scope"
 _MAXIMIZE_DIALOG_VIEWPORT_WIDTH = "90vw"
+# Cap the dialog and its editor to the viewport so the action buttons stay in view
+# without scrolling the page; the text area scrolls internally instead.
+_MAXIMIZE_DIALOG_MAX_HEIGHT = "82vh"
+_MAXIMIZE_TEXTAREA_MAX_HEIGHT = "46vh"
 _MAXIMIZE_DIALOG_CSS = f"""
 <div class="{_MAXIMIZE_DIALOG_SCOPE_CLASS}" style="display:none"></div>
 <style>
 div[data-testid="stDialog"]:has(.{_MAXIMIZE_DIALOG_SCOPE_CLASS}) [role="dialog"][aria-modal="true"] {{
     width: {_MAXIMIZE_DIALOG_VIEWPORT_WIDTH} !important;
     max-width: {_MAXIMIZE_DIALOG_VIEWPORT_WIDTH} !important;
+    max-height: {_MAXIMIZE_DIALOG_MAX_HEIGHT} !important;
+}}
+div[data-testid="stDialog"]:has(.{_MAXIMIZE_DIALOG_SCOPE_CLASS}) .stTextArea textarea {{
+    max-height: {_MAXIMIZE_TEXTAREA_MAX_HEIGHT} !important;
 }}
 </style>
 """
@@ -110,6 +121,13 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.{_TOKEN_PANEL_SCOPE_CLASS})
     padding-top: 0;
     padding-bottom: 0;
 }}
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.{_TOKEN_PANEL_SCOPE_CLASS})
+    div[data-testid="stVerticalBlock"] {{
+    gap: 0.25rem;
+}}
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.{_TOKEN_PANEL_SCOPE_CLASS}) > div {{
+    padding-bottom: 0.5rem;
+}}
 </style>
 """
 
@@ -134,6 +152,11 @@ _STATS_KEY = "basic_rag_qa_stats"
 # A replay stashes a record here; a one-shot flag then moves focus to the prompt.
 _REPLAY_KEY = "basic_rag_qa_replay"
 _FOCUS_PROMPT_KEY = "basic_rag_qa_focus_prompt"
+# The Edit-template dialog: the editable copy, the flag that keeps it open across
+# reruns, and a one-shot flag set when a save is rejected for bad placeholders.
+_TEMPLATE_EDIT_KEY = "basic_rag_qa_template_edit"
+_EDIT_TEMPLATE_OPEN_KEY = "basic_rag_qa_edit_template_open"
+_TEMPLATE_INVALID_KEY = "basic_rag_qa_template_invalid"
 
 
 def render_page(context: RagPageContext) -> None:
@@ -163,10 +186,16 @@ def render_page(context: RagPageContext) -> None:
     st.session_state.setdefault(_PROMPT_KEY, "")
 
     index, model, tone, top_results = _render_panel(strings, indexes, model_options, tones)
-    question, generate = _render_question_form(strings, disabled=index is None)
+    question, generate = _render_question_form(strings, session_root, disabled=index is None)
     do_generate = bool(generate and index is not None and question.strip())
     _render_search_results(
-        strings, index, question.strip() if question else "", top_results, tone, do_generate
+        strings,
+        index,
+        question.strip() if question else "",
+        top_results,
+        tone,
+        do_generate,
+        session_root,
     )
 
     prompt_text, send, maximize, answer_slot = _render_prompt_form(strings, disabled=index is None)
@@ -201,6 +230,8 @@ def render_page(context: RagPageContext) -> None:
 
     if st.session_state.get(_MAXIMIZE_OPEN_KEY):
         _prompt_maximize_dialog(strings)
+    if st.session_state.get(_EDIT_TEMPLATE_OPEN_KEY):
+        _edit_template_dialog(strings, session_root)
 
     records = load_basic_rag_qa_history(session_root)
     _render_token_summary(strings, records)
@@ -253,8 +284,15 @@ def _render_panel(
     return index, model, tone, top_results
 
 
-def _render_question_form(strings: Strings, *, disabled: bool) -> tuple[str, bool]:
-    """Render the question field + Generate-prompt button (Enter submits)."""
+def _render_question_form(
+    strings: Strings, session_root: Path, *, disabled: bool
+) -> tuple[str, bool]:
+    """Render the question field + Generate-prompt / Edit-template buttons.
+
+    Generate is defined first so Enter submits it, not Edit template. Edit template
+    is a form-submit button (so it can live in the panel, right of Generate) that
+    opens the editor via its on-click without triggering generation.
+    """
     with st.form("basic_rag_qa_question_form", enter_to_submit=True, border=True):
         question = st.text_input(
             strings["BASIC_QA_QUESTION_LABEL"],
@@ -262,13 +300,23 @@ def _render_question_form(strings: Strings, *, disabled: bool) -> tuple[str, boo
             disabled=disabled,
             key=_QUESTION_KEY,
         )
-        generate = st.form_submit_button(
-            strings["BASIC_QA_GENERATE_BUTTON"],
-            type="primary",
-            icon=":material/auto_awesome:",
-            help=strings["BASIC_QA_GENERATE_HELP"],
-            disabled=disabled,
-        )
+        generate_col, edit_col = st.columns(2, vertical_alignment="center")
+        with generate_col:
+            generate = st.form_submit_button(
+                strings["BASIC_QA_GENERATE_BUTTON"],
+                type="primary",
+                icon=":material/auto_awesome:",
+                help=strings["BASIC_QA_GENERATE_HELP"],
+                disabled=disabled,
+            )
+        with edit_col, st.container(horizontal_alignment="right"):
+            st.form_submit_button(
+                strings["BASIC_QA_EDIT_TEMPLATE_BUTTON"],
+                icon=":material/edit_note:",
+                help=strings["BASIC_QA_EDIT_TEMPLATE_HELP"],
+                on_click=_open_edit_template,
+                args=(session_root,),
+            )
     return question, generate
 
 
@@ -338,8 +386,10 @@ def _prompt_maximize_dialog(strings: Strings) -> None:
     back (and closes). Dismissing another way (X / click-away / Esc) discards the
     edits, leaving the inline prompt unchanged.
     """
-    st.markdown(_MAXIMIZE_DIALOG_CSS, unsafe_allow_html=True)
-    st.markdown(f"**{strings['BASIC_QA_MAXIMIZE_TITLE']}**")
+    st.markdown(
+        f"{_MAXIMIZE_DIALOG_CSS}\n\n**{strings['BASIC_QA_MAXIMIZE_TITLE']}**",
+        unsafe_allow_html=True,
+    )
     st.text_area(
         strings["BASIC_QA_PROMPT_LABEL"],
         height=_MAXIMIZE_PROMPT_HEIGHT,
@@ -355,6 +405,76 @@ def _prompt_maximize_dialog(strings: Strings) -> None:
         )
 
 
+def _open_edit_template(session_root: Path) -> None:
+    """Seed the editor from the effective template, then open the dialog."""
+    st.session_state[_TEMPLATE_EDIT_KEY] = resolve_basic_rag_qa_prompt_template(session_root)
+    st.session_state[_TEMPLATE_INVALID_KEY] = False
+    st.session_state[_EDIT_TEMPLATE_OPEN_KEY] = True
+
+
+def _save_template(session_root: Path) -> None:
+    """Persist the edited template; keep the dialog open with a warning if invalid."""
+    template = st.session_state.get(_TEMPLATE_EDIT_KEY, "")
+    if not basic_rag_qa_template_is_valid(template):
+        st.session_state[_TEMPLATE_INVALID_KEY] = True
+        return
+    save_basic_rag_qa_template(session_root, template)
+    st.session_state[_EDIT_TEMPLATE_OPEN_KEY] = False
+
+
+def _reset_template(session_root: Path) -> None:
+    """Delete the session template and reseed the editor from the default."""
+    reset_basic_rag_qa_template(session_root)
+    st.session_state[_TEMPLATE_EDIT_KEY] = resolve_basic_rag_qa_prompt_template()
+    st.session_state[_TEMPLATE_INVALID_KEY] = False
+
+
+def _on_edit_template_dismiss() -> None:
+    """Close the editor without saving (X / click-away / Esc discard edits)."""
+    st.session_state[_EDIT_TEMPLATE_OPEN_KEY] = False
+
+
+@st.dialog(" ", width="large", on_dismiss=_on_edit_template_dismiss)
+def _edit_template_dialog(strings: Strings, session_root: Path) -> None:
+    """Edit the per-session prompt template that Generate prompt fills in.
+
+    Save persists the template for this session (used until reset); Reset removes it
+    so the default returns. The placeholders must survive, so an invalid template is
+    rejected rather than silently falling back to the default.
+    """
+    st.markdown(
+        f"{_MAXIMIZE_DIALOG_CSS}\n\n"
+        f"**{strings['BASIC_QA_EDIT_TEMPLATE_TITLE']}**  \n"
+        f"<span style='opacity:0.6;font-size:0.875rem'>"
+        f"{strings['BASIC_QA_EDIT_TEMPLATE_CAPTION']}</span>",
+        unsafe_allow_html=True,
+    )
+    if st.session_state.pop(_TEMPLATE_INVALID_KEY, False):
+        st.warning(strings["BASIC_QA_EDIT_TEMPLATE_INVALID"])
+    st.text_area(
+        strings["BASIC_QA_EDIT_TEMPLATE_TITLE"],
+        height=_MAXIMIZE_PROMPT_HEIGHT,
+        label_visibility="collapsed",
+        key=_TEMPLATE_EDIT_KEY,
+    )
+    reset_col, save_col = st.columns(2, vertical_alignment="center")
+    with reset_col:
+        st.button(
+            strings["BASIC_QA_EDIT_TEMPLATE_RESET"],
+            icon=":material/restart_alt:",
+            on_click=_reset_template,
+            args=(session_root,),
+        )
+    with save_col, st.container(horizontal_alignment="right"):
+        st.button(
+            strings["BASIC_QA_EDIT_TEMPLATE_SAVE"],
+            type="primary",
+            icon=":material/check:",
+            on_click=_save_template,
+            args=(session_root,),
+        )
+
+
 def _render_search_results(
     strings: Strings,
     index: IndexRef | None,
@@ -362,6 +482,7 @@ def _render_search_results(
     top_results: int,
     tone: str,
     do_generate: bool,
+    session_root: Path,
 ) -> None:
     """Render the always-present Search results panel between question and prompt.
 
@@ -377,7 +498,10 @@ def _render_search_results(
         render_messages(strings, result.warnings, result.errors)
         st.session_state[_QA_RESULTS_KEY] = list(result.chunks)
         st.session_state[_PROMPT_KEY] = build_rag_prompt(
-            question, result.chunks, tone, template=resolve_basic_rag_qa_prompt_template()
+            question,
+            result.chunks,
+            tone,
+            template=resolve_basic_rag_qa_prompt_template(session_root),
         )
         st.session_state[_ANSWER_KEY] = None
         st.session_state[_STATS_KEY] = None
@@ -602,14 +726,17 @@ def _render_basic_rag_qa_history(
             return
         for position, record in enumerate(records):
             with st.container(border=True):
-                head, pin_col, replay_col = st.columns([0.8, 0.1, 0.1], vertical_alignment="center")
+                head, actions = st.columns([0.8, 0.2], vertical_alignment="center")
                 head.markdown(
                     stacked_label_value_html(
                         strings["BASIC_QA_HISTORY_LABEL_QUESTION"], record.question or "—"
                     ),
                     unsafe_allow_html=True,
                 )
-                with pin_col:
+                with (
+                    actions,
+                    st.container(horizontal=True, horizontal_alignment="right", gap="small"),
+                ):
                     pin_help = (
                         strings["BASIC_QA_HISTORY_UNPIN_HELP"]
                         if record.pinned
@@ -619,12 +746,12 @@ def _render_basic_rag_qa_history(
                         ":material/keep_off:" if record.pinned else ":material/keep:",
                         key=f"basic_rag_qa_history_pin_{position}",
                         help=pin_help,
+                        type="primary" if record.pinned else "secondary",
                     ):
                         set_basic_rag_qa_pinned(
                             session_root, record.timestamp_utc, not record.pinned
                         )
                         st.rerun()
-                with replay_col:
                     if st.button(
                         ":material/replay:",
                         key=f"basic_rag_qa_history_replay_{position}",

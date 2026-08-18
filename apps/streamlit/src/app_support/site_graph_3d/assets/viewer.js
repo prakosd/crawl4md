@@ -17,18 +17,19 @@ const t = (key, fallback) => (L[key] != null ? L[key] : fallback != null ? fallb
 const MIN_PLANET_R = 0.6;
 const MAX_PLANET_R = 3.0;
 const SUN_R = 3.4;
-const SUN_CLEARANCE = 9;
-const RING_STEP = 7.5;
-const MIN_ARC = 5.2; // min world spacing between planets on a ring (anti-overlap)
+const SUN_CLEARANCE = 9; // min camera clearance from the central sun
 const ROOT_CLUSTER_R = 3.0; // radius when several seed pages share the centre
 const ORBIT_BASE_SPEED = 0.16;
 const AUTO_ROTATE_SPEED = 0.2; // idle camera auto-revolve speed (OrbitControls units)
-const RADIAL_JITTER = 3.6; // world-unit spread across a ring band (organic thickness)
-const VERTICAL_JITTER = 4.2; // small vertical scatter so the disc isn't perfectly flat
-const DEPTH1_JITTER = 0.5; // fraction of a slot the depth-1 ring may wobble
-const SIBLING_STEP = 0.15; // radians between siblings fanned under a parent
-const SIBLING_JITTER = 0.1; // radians of random wobble per sibling
-const MAX_SIBLING_FAN = 1.15; // cap on a parent brood's angular width
+// Nested clusters: each page's children orbit that page. The local ring grows with
+// the brood size and the sqrt of the subtree weight, so a busy page flings its
+// children out into their own separated cluster (galaxy-of-clusters look).
+const LOCAL_RING_MIN = 6.0; // closest a child sits to its parent
+const LOCAL_RING_PER_DESC = 4.2; // fling a child out by sqrt(its own subtree size)
+const LOCAL_WEDGE_MIN = 1.0; // min angular share for a leaf child
+const LOCAL_ANGLE_JITTER = 0.35; // radians of angular wobble per child
+const LOCAL_RADIAL_JITTER = 1.6; // world-unit spread across a local ring band
+const LOCAL_VERTICAL_JITTER = 2.4; // small vertical scatter within a cluster
 const SEG_PER_EDGE = 18; // samples per curved link (trajectory-arc smoothness)
 const STAR_COUNT = 1600;
 const HOVER_MS = 33;
@@ -368,7 +369,6 @@ function shadeColor(hex, factor) {
 // ── Layout: orbital rings by crawl depth ─────────────────────────────────────
 const nodes = Array.isArray(MODEL.nodes) ? MODEL.nodes : [];
 const nodeById = new Map(nodes.map((n) => [n.id, n]));
-const angleById = new Map();
 const planetById = new Map();
 const planets = []; // { node, mesh, pivot, selfSpeed }
 
@@ -388,92 +388,109 @@ function ringSpeed(radius) {
   return radius > 0 ? ORBIT_BASE_SPEED / Math.sqrt(radius) : 0;
 }
 
+// Nested orbital layout: each page's children orbit that page, so the crawl reads
+// as a galaxy of clusters (moons around planets around the sun) rather than flat
+// depth rings. A page's local ring scales with its subtree, flinging busy pages'
+// broods out into their own separated cluster.
 function buildLayout() {
-  const byDepth = new Map();
+  const childrenById = new Map();
   for (const node of nodes) {
-    const d = Math.max(0, Number(node.depth) || 0);
-    if (!byDepth.has(d)) byDepth.set(d, []);
-    byDepth.get(d).push(node);
+    const parent = node.parent;
+    if (parent != null && nodeById.has(parent) && parent !== node.id) {
+      if (!childrenById.has(parent)) childrenById.set(parent, []);
+      childrenById.get(parent).push(node);
+    }
   }
-  const depths = [...byDepth.keys()].sort((a, b) => a - b);
+  let outer = SUN_CLEARANCE;
 
-  // Roots cluster at the centre (a single seed sits dead centre as the sun).
-  const roots = byDepth.get(0) || [];
+  // Place a page's not-yet-placed children on a local ring around it, parenting
+  // their orbits to the page's own system so they revolve with it.
+  function layoutChildren(node, nodeSystem) {
+    const kids = (childrenById.get(node.id) || []).filter((k) => !planetById.has(k.id));
+    if (kids.length === 0) return;
+    kids.sort((a, b) => cmp(a.id, b.id));
+    // Angular wedge per child scales with its subtree, so a busy child claims more
+    // arc; its orbit radius scales with its subtree too, flinging its cluster out
+    // clear of the parent and its siblings.
+    const weight = (k) => LOCAL_WEDGE_MIN + Math.sqrt(Number(k.descendant_count) || 0);
+    const total = kids.reduce((s, k) => s + weight(k), 0);
+    let acc = 0;
+    kids.forEach((child) => {
+      const rng = mulberry32(hashString(child.id));
+      const w = weight(child);
+      const angle = ((acc + w / 2) / total) * Math.PI * 2 + (rng() - 0.5) * LOCAL_ANGLE_JITTER;
+      acc += w;
+      const desc = Number(child.descendant_count) || 0;
+      const radius =
+        LOCAL_RING_MIN +
+        LOCAL_RING_PER_DESC * Math.sqrt(desc) +
+        (rng() - 0.5) * 2 * LOCAL_RADIAL_JITTER;
+      const y = (rng() - 0.5) * 2 * LOCAL_VERTICAL_JITTER;
+      const childSystem = createBody(child, {
+        radius,
+        angle,
+        y,
+        orbitSpeed: ringSpeed(radius),
+        isRoot: false,
+        parentSystem: nodeSystem,
+      });
+      layoutChildren(child, childSystem);
+    });
+  }
+
+  const roots = nodes.filter((n) => n.is_root || !nodeById.has(n.parent));
+  roots.sort((a, b) => cmp(a.id, b.id));
   roots.forEach((node, i) => {
     const angle = roots.length > 1 ? (i / roots.length) * Math.PI * 2 : 0;
     const radius = roots.length > 1 ? ROOT_CLUSTER_R : 0;
-    angleById.set(node.id, angle);
-    createBody(node, { radius, angle, y: 0, orbitSpeed: 0, isRoot: true });
-  });
-
-  // Each ring sits farther out by depth; a whole ring shares one orbit speed so
-  // its clusters rotate together instead of shearing apart.
-  let prevR = SUN_CLEARANCE;
-  for (const d of depths) {
-    if (d === 0) continue;
-    const ring = byDepth.get(d);
-    const count = ring.length;
-    const minCirc = (count * MIN_ARC) / (Math.PI * 2);
-    const r = Math.max(SUN_CLEARANCE + d * RING_STEP, minCirc, prevR + RING_STEP);
-    prevR = r;
-    const speed = ringSpeed(r);
-    if (d === 1) layoutRingSpread(ring, r, speed);
-    else layoutRingClustered(ring, r, speed);
-  }
-  return prevR;
-}
-
-// Depth 1: the sun's direct pages spread around the whole circle, but with a
-// wobble so the ring reads organic rather than machine-stamped.
-function layoutRingSpread(ring, r, speed) {
-  ring.sort((a, b) => cmp(a.id, b.id));
-  const count = ring.length;
-  const slot = (Math.PI * 2) / count;
-  ring.forEach((node, i) => {
-    const rng = mulberry32(hashString(node.id));
-    const angle = i * slot + (rng() - 0.5) * slot * DEPTH1_JITTER;
-    placeNode(node, r, angle, speed, rng);
-  });
-}
-
-// Depth >= 2: sub-pages fan out in a small cluster centred on their parent's
-// angle, so related pages bunch together with gaps between clusters.
-function layoutRingClustered(ring, r, speed) {
-  const byParent = new Map();
-  for (const node of ring) {
-    const key = node.parent || "";
-    if (!byParent.has(key)) byParent.set(key, []);
-    byParent.get(key).push(node);
-  }
-  for (const [parentId, siblings] of byParent) {
-    siblings.sort((a, b) => cmp(a.id, b.id));
-    const base = angleById.has(parentId) ? angleById.get(parentId) : 0;
-    const m = siblings.length;
-    const fan = Math.min(m * SIBLING_STEP, MAX_SIBLING_FAN);
-    siblings.forEach((node, k) => {
-      const rng = mulberry32(hashString(node.id));
-      const offset = m > 1 ? (k / (m - 1) - 0.5) * fan : 0;
-      const angle = base + offset + (rng() - 0.5) * SIBLING_JITTER;
-      placeNode(node, r, angle, speed, rng);
+    const rootSystem = createBody(node, {
+      radius,
+      angle,
+      y: 0,
+      orbitSpeed: 0,
+      isRoot: true,
+      parentSystem: systemGroup,
     });
+    layoutChildren(node, rootSystem);
+  });
+
+  // Safety net: place any node unreachable from a root (e.g. a discovered-from
+  // cycle) at the centre so nothing silently disappears.
+  for (const node of nodes) {
+    if (planetById.has(node.id)) continue;
+    const sys = createBody(node, {
+      radius: 0,
+      angle: 0,
+      y: 0,
+      orbitSpeed: 0,
+      isRoot: false,
+      parentSystem: systemGroup,
+    });
+    layoutChildren(node, sys);
   }
+
+  // Frame the camera to the actual built extent (max node distance from centre),
+  // not the worst-case radius sum, so the clusters fill the view at any depth.
+  systemGroup.updateMatrixWorld(true);
+  const worldPos = new THREE.Vector3();
+  for (const p of planets) {
+    p.mesh.getWorldPosition(worldPos);
+    outer = Math.max(outer, worldPos.length());
+  }
+  return outer;
 }
 
-// Apply organic radial + vertical jitter and register the body. The angle is
-// stored so this node's own children can cluster beneath it on the next ring.
-function placeNode(node, ringR, angle, speed, rng) {
-  const radius = ringR + (rng() - 0.5) * 2 * RADIAL_JITTER;
-  const y = (rng() - 0.5) * 2 * VERTICAL_JITTER;
-  angleById.set(node.id, angle);
-  createBody(node, { radius, angle, y, orbitSpeed: speed, isRoot: false });
-}
-
-function createBody(node, { radius, angle, y, orbitSpeed, isRoot }) {
+function createBody(node, { radius, angle, y, orbitSpeed, isRoot, parentSystem }) {
   const orbit = new THREE.Group();
   const pivot = new THREE.Group();
+  const nodeSystem = new THREE.Group();
   orbit.add(pivot);
   pivot.rotation.y = angle;
-  systemGroup.add(orbit);
+  pivot.add(nodeSystem);
+  // The orbit offset lives on nodeSystem (not the mesh) so the mesh can self-spin
+  // in place while this page's children orbit its position without whirling.
+  nodeSystem.position.set(radius, y, 0);
+  parentSystem.add(orbit);
 
   let mesh;
   if (isRoot) {
@@ -485,9 +502,8 @@ function createBody(node, { radius, angle, y, orbitSpeed, isRoot }) {
   } else {
     mesh = makePlanet(node);
   }
-  mesh.position.set(radius, y, 0);
   mesh.userData.node = node;
-  pivot.add(mesh);
+  nodeSystem.add(mesh);
 
   planetById.set(node.id, mesh);
   planets.push({
@@ -497,6 +513,7 @@ function createBody(node, { radius, angle, y, orbitSpeed, isRoot }) {
     orbitSpeed,
     selfSpeed: 0.12 + (hashString(node.id) % 100) / 320,
   });
+  return nodeSystem;
 }
 
 // Soft radial-gradient glow reused by the sun's corona and red-dwarf halos.
@@ -828,7 +845,7 @@ function writePulse(offset, s, elapsed) {
 
 // ── Camera framing + reset ───────────────────────────────────────────────────
 const homeTarget = new THREE.Vector3(0, 0, 0);
-const homePos = new THREE.Vector3(0, outerRadius * 0.85 + 16, outerRadius * 1.7 + 34);
+const homePos = new THREE.Vector3(0, outerRadius * 0.6 + 10, outerRadius * 1.15 + 20);
 camera.position.copy(homePos);
 controls.target.copy(homeTarget);
 controls.maxDistance = outerRadius * 6 + 400;

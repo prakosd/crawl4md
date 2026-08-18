@@ -20,8 +20,12 @@ __all__ = [
     "BASIC_QA_HISTORY_DIRNAME",
     "BasicQaRecord",
     "append_basic_rag_qa_record",
-    "load_basic_rag_qa_history",
     "basic_rag_qa_history_dir",
+    "basic_rag_qa_template_path",
+    "load_basic_rag_qa_history",
+    "load_basic_rag_qa_template",
+    "reset_basic_rag_qa_template",
+    "save_basic_rag_qa_template",
     "set_basic_rag_qa_pinned",
 ]
 
@@ -30,6 +34,9 @@ __all__ = [
 BASIC_QA_HISTORY_DIRNAME = f"{BASIC_RAG_QA_FOLDER_PREFIX}history"
 _HISTORY_FILE = "basic_rag_qa_history.jsonl"
 _HISTORY_CSV = "basic_rag_qa_history.csv"
+# The Edit-template editor saves the user's prompt template here, inside the same
+# per-session folder so it shows up (and downloads) in the Files & folders panel.
+_TEMPLATE_FILE = "prompt_template.txt"
 _MAX_RECORDS = 200
 _CSV_COLUMNS = (
     "timestamp_utc",
@@ -74,6 +81,32 @@ class BasicQaRecord:
 def basic_rag_qa_history_dir(session_root: Path | str) -> Path:
     """Return the per-session ``basic_rag_qa_history/`` folder path."""
     return Path(session_root) / BASIC_QA_HISTORY_DIRNAME
+
+
+def basic_rag_qa_template_path(session_root: Path | str) -> Path:
+    """Return the per-session saved prompt-template file path."""
+    return basic_rag_qa_history_dir(session_root) / _TEMPLATE_FILE
+
+
+def load_basic_rag_qa_template(session_root: Path | str) -> str | None:
+    """Return the session's saved prompt template, or ``None`` when unset/empty."""
+    try:
+        text = basic_rag_qa_template_path(session_root).read_text(encoding="utf-8")
+    except OSError:
+        return None
+    return text if text.strip() else None
+
+
+def save_basic_rag_qa_template(session_root: Path | str, template: str) -> None:
+    """Persist *template* as this session's prompt template."""
+    directory = basic_rag_qa_history_dir(session_root)
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / _TEMPLATE_FILE).write_text(template, encoding="utf-8")
+
+
+def reset_basic_rag_qa_template(session_root: Path | str) -> None:
+    """Remove the session's saved prompt template, reverting to the default."""
+    basic_rag_qa_template_path(session_root).unlink(missing_ok=True)
 
 
 def load_basic_rag_qa_history(session_root: Path | str) -> list[BasicQaRecord]:

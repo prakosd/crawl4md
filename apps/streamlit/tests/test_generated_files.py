@@ -23,6 +23,7 @@ from app_support.generated_files import (
     find_latest_crawl_dir,
     find_ready_download_in_session,
     find_site_graph_file,
+    find_site_graph_for_result,
     folder_zip_cache_token,
     format_file_size,
     format_run_timestamp_label,
@@ -338,6 +339,35 @@ def test_find_site_graph_file_returns_none_when_absent() -> None:
     tree = build_download_tree(files)
 
     assert find_site_graph_file(tree["vector_01"]) is None
+
+
+# Risk: the ready-result panel needs the crawl run's site graph from a download's
+# relative path (``<crawl>/<ts>/...``). Verify it resolves the run's logs graph.
+# Type: unit.
+def test_find_site_graph_for_result_locates_run_logs(tmp_path: Path) -> None:
+    graph = tmp_path / "crawl_01_river" / "2026-05-17_10-00-00" / "logs" / "site_graph.jsonl"
+    graph.parent.mkdir(parents=True)
+    graph.write_text("{}\n", encoding="utf-8")
+
+    found = find_site_graph_for_result(
+        tmp_path, "crawl_01_river/2026-05-17_10-00-00/final/success_content.zip"
+    )
+
+    assert found is not None
+    assert found.relative_path == "crawl_01_river/2026-05-17_10-00-00/logs/site_graph.jsonl"
+
+
+# Risk: a crawl that predates site graphs (or any missing graph) must yield no
+# button rather than a broken one. Verify a None result. Type: unit.
+def test_find_site_graph_for_result_returns_none_when_absent(tmp_path: Path) -> None:
+    (tmp_path / "crawl_01_river" / "2026-05-17_10-00-00").mkdir(parents=True)
+
+    assert (
+        find_site_graph_for_result(
+            tmp_path, "crawl_01_river/2026-05-17_10-00-00/final/success_content.zip"
+        )
+        is None
+    )
 
 
 def test_delete_generated_folder_removes_folder_and_contents(tmp_path: Path) -> None:
