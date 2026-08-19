@@ -51,6 +51,9 @@ _FOCUS_QUERY_KEY = "semantic_search_focus_query"
 _RESULTS_KEY = "semantic_search_results"
 _RESULTS_EXPAND_KEY = "semantic_search_results_expanded"
 
+# Tighten the gap between the pin and replay buttons in each history card.
+_HISTORY_ACTIONS_CSS = "<style>[class*='st-key-search_history_actions_']{gap:0.5rem}</style>"
+
 
 def render_page(context: RagPageContext) -> None:
     """Render the semantic search page content area."""
@@ -231,6 +234,7 @@ def _render_search_history(
         if not records:
             st.caption(strings["SEARCH_HISTORY_EMPTY"])
             return
+        st.markdown(_HISTORY_ACTIONS_CSS, unsafe_allow_html=True)
         for position, record in enumerate(records):
             ref = find_index(indexes, record.index_folder, record.index_run)
             with st.container(border=True):
@@ -241,7 +245,7 @@ def _render_search_history(
                 )
                 with (
                     actions,
-                    st.container(horizontal=True, horizontal_alignment="right", gap="small"),
+                    st.container(horizontal=True, horizontal_alignment="right", gap="small", key=f"search_history_actions_{position}"),
                 ):
                     pin_help = (
                         strings["SEARCH_HISTORY_UNPIN_HELP"]

@@ -131,6 +131,9 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.{_TOKEN_PANEL_SCOPE_CLASS})
 </style>
 """
 
+# Tighten the gap between the pin and replay buttons in each history card.
+_HISTORY_ACTIONS_CSS = "<style>[class*='st-key-basic_rag_qa_history_actions_']{gap:0.5rem}</style>"
+
 # Widget keys; a history replay pre-fills these before the widgets render.
 _INDEX_KEY = "basic_rag_qa_index"
 _TOP_RESULTS_KEY = "basic_rag_qa_top_results"
@@ -724,6 +727,7 @@ def _render_basic_rag_qa_history(
         if not records:
             st.caption(strings["BASIC_QA_HISTORY_EMPTY"])
             return
+        st.markdown(_HISTORY_ACTIONS_CSS, unsafe_allow_html=True)
         for position, record in enumerate(records):
             with st.container(border=True):
                 head, actions = st.columns([0.8, 0.2], vertical_alignment="center")
@@ -735,7 +739,7 @@ def _render_basic_rag_qa_history(
                 )
                 with (
                     actions,
-                    st.container(horizontal=True, horizontal_alignment="right", gap="small"),
+                    st.container(horizontal=True, horizontal_alignment="right", gap="small", key=f"basic_rag_qa_history_actions_{position}"),
                 ):
                     pin_help = (
                         strings["BASIC_QA_HISTORY_UNPIN_HELP"]
