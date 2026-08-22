@@ -190,6 +190,11 @@ STRINGS_EN: Strings = {
     "BASIC_QA_MAXIMIZE_HELP": "Maximize the prompt editor",
     "BASIC_QA_MAXIMIZE_TITLE": "Edit prompt",
     "BASIC_QA_MAXIMIZE_APPLY": "Apply",
+    "BASIC_QA_MAXIMIZE_CAPTION": (
+        "Edit the full prompt sent to the model. Apply keeps your changes; "
+        "closing another way discards them."
+    ),
+    "BASIC_QA_MAXIMIZE_APPLIED_TOAST": "Prompt updated.",
     "BASIC_QA_EDIT_TEMPLATE_BUTTON": "Edit template",
     "BASIC_QA_EDIT_TEMPLATE_HELP": (
         "Edit the prompt template that Generate prompt fills in. Saved for this session."
@@ -205,6 +210,8 @@ STRINGS_EN: Strings = {
         "Keep only the placeholders {question}, {start}, {knowledge}, {end}, and {tone} — "
         "remove any other text in braces, then save again."
     ),
+    "BASIC_QA_TEMPLATE_SAVED_TOAST": "Prompt template saved.",
+    "BASIC_QA_TEMPLATE_RESET_TOAST": "Prompt template reset to default.",
     "BASIC_QA_NO_PROMPT_HINT": "Generate a prompt first, then send it.",
     "BASIC_QA_ANSWER_HEADER": ":material/smart_toy: Answer",
     "BASIC_QA_ANSWER_STATS": (
@@ -212,12 +219,29 @@ STRINGS_EN: Strings = {
         "total {total} · answered in {seconds}s"
     ),
     "BASIC_QA_TOKEN_NA": "n/a",
-    "BASIC_QA_TOKEN_PANEL_TITLE": "Token count",
+    "BASIC_QA_TOKEN_PANEL_TITLE": ":material/token: Token usage",
     "BASIC_QA_SUMMARY_QUOTA_LABEL": "Quota",
-    "BASIC_QA_SUMMARY_USAGE_LABEL": "% Usage",
+    "BASIC_QA_SUMMARY_USAGE_LABEL": "Usage",
     "BASIC_QA_SUMMARY_INPUT_LABEL": "Input",
     "BASIC_QA_SUMMARY_OUTPUT_LABEL": "Output",
     "BASIC_QA_SUMMARY_TOTAL_LABEL": "Total",
+    "BASIC_QA_TXN_PANEL_TITLE": ":material/receipt_long: Transaction history",
+    "BASIC_QA_TXN_COL_TIME": "Date & time",
+    "BASIC_QA_TXN_COL_PROVIDER": "Provider",
+    "BASIC_QA_TXN_COL_CLOUD": "Cloud service",
+    "BASIC_QA_TXN_COL_COST": "Est. cost (USD)",
+    "BASIC_QA_TXN_COL_PROCESS": "Process",
+    "BASIC_QA_PROCESS_ANSWER_GEN": "Answer generation",
+    "BASIC_QA_TXN_EMPTY": "No transactions yet — send a prompt to record one.",
+    "BASIC_QA_COST_UNDER_MIN": "< $0.0001",
+    "BASIC_QA_COST_DISCLAIMER": (
+        "Costs are rough USD estimates from published prices captured {date}. Sources: {sources}."
+    ),
+    "BASIC_QA_TXN_CSV_LABEL": "Download CSV",
+    "BASIC_QA_TXN_CSV_HELP": "Download the transaction history as a CSV file.",
+    "BASIC_QA_PRICING_LABEL": "Pricing",
+    "BASIC_QA_PRICING_HELP": "See per-model token prices used for cost estimates.",
+    "BASIC_QA_PRICING_TITLE": ":material/request_quote: Model pricing",
     "BASIC_QA_HISTORY_EXPANDER": ":material/history: Prompt history",
     "BASIC_QA_HISTORY_EMPTY": "No prompts yet — send one to build your history.",
     "BASIC_QA_HISTORY_REPLAY_HELP": "Load this prompt back into the form",
@@ -462,6 +486,14 @@ STRINGS_EN: Strings = {
     "FILES_UPLOAD_CONFIRM": "Upload",
     "FILES_UPLOAD_CANCEL": "Cancel",
     "FILES_UPLOAD_SUCCESS": "Upload complete — added {folder}.",
+    "FILES_SAMPLE_PANEL_TITLE": ":material/dataset: Sample data",
+    "FILES_SAMPLE_PANEL_CAPTION": (
+        "Import a ready-made crawl or index to skip Steps 1-2 and jump straight to Semantic search."
+    ),
+    "FILES_SAMPLE_CATEGORY_CRAWL_RESULTS": "Crawl results",
+    "FILES_SAMPLE_CATEGORY_VECTOR_INDEXES": "Vector indexes",
+    "FILES_SAMPLE_IMPORT_HELP": "Import this sample into your session",
+    "FILES_SAMPLE_IMPORT_SUCCESS": "Sample imported as {folder} — open Files & folders to use it.",
     # ── Ready result download ──────────────────────────────────────────
     "READY_RESULT_HEADER": "📦 Crawl results ready",
     "READY_RESULT_SINGLE_SUBTITLE": "1 success file ready to download",

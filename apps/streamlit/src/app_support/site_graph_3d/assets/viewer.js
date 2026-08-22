@@ -7,6 +7,14 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import {
+  forceSimulation,
+  forceManyBody,
+  forceLink,
+  forceCollide,
+  forceX,
+  forceY,
+} from "d3-force";
 
 // ── Data + labels ────────────────────────────────────────────────────────────
 const MODEL = window.__SITE_GRAPH__ || { nodes: [], edges: [], root_ids: [], stats: {} };
@@ -18,19 +26,12 @@ const MIN_PLANET_R = 0.6;
 const MAX_PLANET_R = 3.0;
 const SUN_R = 3.4;
 const SUN_CLEARANCE = 9; // min camera clearance from the central sun
-const ROOT_CLUSTER_R = 3.0; // radius when several seed pages share the centre
-const ORBIT_BASE_SPEED = 0.16;
 const AUTO_ROTATE_SPEED = 0.2; // idle camera auto-revolve speed (OrbitControls units)
-// Nested clusters: each page's children orbit that page. The local ring grows with
-// the brood size and the sqrt of the subtree weight, so a busy page flings its
-// children out into their own separated cluster (galaxy-of-clusters look).
-const LOCAL_RING_MIN = 6.0; // closest a child sits to its parent
-const LOCAL_RING_PER_DESC = 4.2; // fling a child out by sqrt(its own subtree size)
-const LOCAL_WEDGE_MIN = 1.0; // min angular share for a leaf child
-const LOCAL_ANGLE_JITTER = 0.35; // radians of angular wobble per child
-const LOCAL_RADIAL_JITTER = 1.6; // world-unit spread across a local ring band
-const LOCAL_VERTICAL_JITTER = 2.4; // small vertical scatter within a cluster
-const SEG_PER_EDGE = 18; // samples per curved link (trajectory-arc smoothness)
+// Planet positions are computed in the browser by a d3-force simulation (see
+// runForceLayout below): pages repel, parent→child links attract, collision +
+// centre-gravity keep the whole crawl compact, and the seed page is pinned as
+// the central sun — so a large, deep crawl reads as clustered constellations.
+const SEG_PER_EDGE = 18; // samples per link (kept so the flow-pulse can run along it)
 const STAR_COUNT = 1600;
 const HOVER_MS = 33;
 const CLICK_DRAG_PX = 6;
@@ -380,140 +381,99 @@ function clamp01(v) {
   return Math.max(0, Math.min(1, v));
 }
 
-function cmp(a, b) {
-  return a < b ? -1 : a > b ? 1 : 0;
+// Positions are computed here in the browser by a force-directed simulation
+// (d3-force): pages repel, parent→child links pull together, a collision force
+// keeps bodies from stacking, and a gentle pull to the centre keeps the whole
+// site compact — so a large, deep crawl reads as clustered constellations, not a
+// sprawl. One seed page is pinned at the origin as the central sun; the run is
+// seeded per crawl so a given graph settles the same way every time it opens.
+const FORCE_CHARGE = -26; // node-to-node repulsion (negative = repel)
+const FORCE_CHARGE_MAX = 260; // cap repulsion range so distant clusters don't blow apart
+const FORCE_LINK_DIST = 9; // desired parent→child spacing (world units)
+const FORCE_LINK_STRENGTH = 0.72;
+const FORCE_COLLIDE_GAP = 0.8; // clearance added to each body radius
+const FORCE_GRAVITY = 0.045; // pull toward the centre (keeps the layout compact)
+const FORCE_TICKS_MIN = 150;
+const FORCE_TICKS_MAX = 420;
+
+const rootIds = new Set(
+  nodes.filter((n) => n.is_root || !nodeById.has(n.parent)).map((n) => n.id),
+);
+
+function bodyRadius(node, isRoot) {
+  return isRoot ? SUN_R + clamp01(Number(node.size_scale) || 0) * 1.6 : planetRadius(node);
 }
 
-function ringSpeed(radius) {
-  return radius > 0 ? ORBIT_BASE_SPEED / Math.sqrt(radius) : 0;
-}
-
-// Nested orbital layout: each page's children orbit that page, so the crawl reads
-// as a galaxy of clusters (moons around planets around the sun) rather than flat
-// depth rings. A page's local ring scales with its subtree, flinging busy pages'
-// broods out into their own separated cluster.
-function buildLayout() {
-  const childrenById = new Map();
-  for (const node of nodes) {
-    const parent = node.parent;
-    if (parent != null && nodeById.has(parent) && parent !== node.id) {
-      if (!childrenById.has(parent)) childrenById.set(parent, []);
-      childrenById.get(parent).push(node);
+function runForceLayout() {
+  const simNodes = nodes.map((n) => ({ id: n.id, r: bodyRadius(n, rootIds.has(n.id)) }));
+  const present = new Set(simNodes.map((s) => s.id));
+  const simLinks = (Array.isArray(MODEL.edges) ? MODEL.edges : [])
+    .filter((e) => present.has(e.source) && present.has(e.target))
+    .map((e) => ({ source: e.source, target: e.target }));
+  // Seed Math.random so d3-force's collision jitter settles a crawl the same way each open.
+  const seededRandom = mulberry32(hashString(simNodes.length + ":" + (simNodes[0]?.id || "")));
+  const originalRandom = Math.random;
+  Math.random = seededRandom;
+  try {
+    const sim = forceSimulation(simNodes)
+      .force("charge", forceManyBody().strength(FORCE_CHARGE).distanceMax(FORCE_CHARGE_MAX))
+      .force(
+        "link",
+        forceLink(simLinks)
+          .id((d) => d.id)
+          .distance(FORCE_LINK_DIST)
+          .strength(FORCE_LINK_STRENGTH),
+      )
+      .force("collide", forceCollide().radius((d) => d.r + FORCE_COLLIDE_GAP).iterations(2))
+      .force("x", forceX(0).strength(FORCE_GRAVITY))
+      .force("y", forceY(0).strength(FORCE_GRAVITY))
+      .stop();
+    let pinned = false;
+    for (const s of simNodes) {
+      if (!pinned && rootIds.has(s.id)) {
+        s.fx = 0;
+        s.fy = 0;
+        pinned = true;
+      }
     }
+    const ticks = Math.max(
+      FORCE_TICKS_MIN,
+      Math.min(FORCE_TICKS_MAX, Math.round(140 + simNodes.length * 0.12)),
+    );
+    for (let i = 0; i < ticks; i++) sim.tick();
+  } finally {
+    Math.random = originalRandom;
   }
+  const positions = new Map();
+  for (const s of simNodes) positions.set(s.id, { x: s.x || 0, y: s.y || 0 });
+  return positions;
+}
+
+const forcePositions = runForceLayout();
+
+function buildLayout() {
   let outer = SUN_CLEARANCE;
-
-  // Place a page's not-yet-placed children on a local ring around it, parenting
-  // their orbits to the page's own system so they revolve with it.
-  function layoutChildren(node, nodeSystem) {
-    const kids = (childrenById.get(node.id) || []).filter((k) => !planetById.has(k.id));
-    if (kids.length === 0) return;
-    kids.sort((a, b) => cmp(a.id, b.id));
-    // Angular wedge per child scales with its subtree, so a busy child claims more
-    // arc; its orbit radius scales with its subtree too, flinging its cluster out
-    // clear of the parent and its siblings.
-    const weight = (k) => LOCAL_WEDGE_MIN + Math.sqrt(Number(k.descendant_count) || 0);
-    const total = kids.reduce((s, k) => s + weight(k), 0);
-    let acc = 0;
-    kids.forEach((child) => {
-      const rng = mulberry32(hashString(child.id));
-      const w = weight(child);
-      const angle = ((acc + w / 2) / total) * Math.PI * 2 + (rng() - 0.5) * LOCAL_ANGLE_JITTER;
-      acc += w;
-      const desc = Number(child.descendant_count) || 0;
-      const radius =
-        LOCAL_RING_MIN +
-        LOCAL_RING_PER_DESC * Math.sqrt(desc) +
-        (rng() - 0.5) * 2 * LOCAL_RADIAL_JITTER;
-      const y = (rng() - 0.5) * 2 * LOCAL_VERTICAL_JITTER;
-      const childSystem = createBody(child, {
-        radius,
-        angle,
-        y,
-        orbitSpeed: ringSpeed(radius),
-        isRoot: false,
-        parentSystem: nodeSystem,
-      });
-      layoutChildren(child, childSystem);
-    });
-  }
-
-  const roots = nodes.filter((n) => n.is_root || !nodeById.has(n.parent));
-  roots.sort((a, b) => cmp(a.id, b.id));
-  roots.forEach((node, i) => {
-    const angle = roots.length > 1 ? (i / roots.length) * Math.PI * 2 : 0;
-    const radius = roots.length > 1 ? ROOT_CLUSTER_R : 0;
-    const rootSystem = createBody(node, {
-      radius,
-      angle,
-      y: 0,
-      orbitSpeed: 0,
-      isRoot: true,
-      parentSystem: systemGroup,
-    });
-    layoutChildren(node, rootSystem);
-  });
-
-  // Safety net: place any node unreachable from a root (e.g. a discovered-from
-  // cycle) at the centre so nothing silently disappears.
   for (const node of nodes) {
-    if (planetById.has(node.id)) continue;
-    const sys = createBody(node, {
-      radius: 0,
-      angle: 0,
-      y: 0,
-      orbitSpeed: 0,
-      isRoot: false,
-      parentSystem: systemGroup,
-    });
-    layoutChildren(node, sys);
-  }
-
-  // Frame the camera to the actual built extent (max node distance from centre),
-  // not the worst-case radius sum, so the clusters fill the view at any depth.
-  systemGroup.updateMatrixWorld(true);
-  const worldPos = new THREE.Vector3();
-  for (const p of planets) {
-    p.mesh.getWorldPosition(worldPos);
-    outer = Math.max(outer, worldPos.length());
+    createBody(node, rootIds.has(node.id));
+    const p = forcePositions.get(node.id) || { x: 0, y: 0 };
+    outer = Math.max(outer, Math.hypot(p.x, p.y));
   }
   return outer;
 }
 
-function createBody(node, { radius, angle, y, orbitSpeed, isRoot, parentSystem }) {
-  const orbit = new THREE.Group();
-  const pivot = new THREE.Group();
-  const nodeSystem = new THREE.Group();
-  orbit.add(pivot);
-  pivot.rotation.y = angle;
-  pivot.add(nodeSystem);
-  // The orbit offset lives on nodeSystem (not the mesh) so the mesh can self-spin
-  // in place while this page's children orbit its position without whirling.
-  nodeSystem.position.set(radius, y, 0);
-  parentSystem.add(orbit);
-
-  let mesh;
-  if (isRoot) {
-    mesh = makeSun(node);
-    if (radius > 0) {
-      const sunLight = new THREE.PointLight(0xfff2d6, 1.6, 0, 0);
-      mesh.add(sunLight);
-    }
-  } else {
-    mesh = makePlanet(node);
+function createBody(node, isRoot) {
+  const mesh = isRoot ? makeSun(node) : makePlanet(node);
+  const p = forcePositions.get(node.id) || { x: 0, y: 0 };
+  mesh.position.set(p.x, 0, p.y);
+  // An offset seed sun (multi-root crawl) lights its neighbourhood; the central
+  // sun at the origin is already lit by the scene's central light.
+  if (isRoot && mesh.position.length() > 1e-3) {
+    mesh.add(new THREE.PointLight(0xfff2d6, 1.6, 0, 0));
   }
   mesh.userData.node = node;
-  nodeSystem.add(mesh);
-
+  systemGroup.add(mesh);
   planetById.set(node.id, mesh);
-  planets.push({
-    node,
-    mesh,
-    pivot,
-    orbitSpeed,
-    selfSpeed: 0.12 + (hashString(node.id) % 100) / 320,
-  });
-  return nodeSystem;
+  planets.push({ node, mesh, selfSpeed: 0.12 + (hashString(node.id) % 100) / 320 });
 }
 
 // Soft radial-gradient glow reused by the sun's corona and red-dwarf halos.
@@ -735,7 +695,7 @@ function buildLinks() {
     new THREE.LineBasicMaterial({
       vertexColors: true,
       transparent: true,
-      opacity: 0.55,
+      opacity: 0.3,
       depthWrite: false,
     }),
   );
@@ -746,7 +706,6 @@ buildLinks();
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _ctrl = new THREE.Vector3();
-const _dir = new THREE.Vector3();
 const _p = new THREE.Vector3();
 const _q = new THREE.Vector3();
 
@@ -768,15 +727,9 @@ function updateLinks() {
     planetById.get(edges[i].target).getWorldPosition(_b);
     systemGroup.worldToLocal(_a);
     systemGroup.worldToLocal(_b);
-    // Bow the link outward from the centre and lift it in Y so it reads like an
-    // orbital-transfer trajectory rather than a straight spoke.
+    // Planets sit still once the force layout settles, so a link is a straight
+    // spoke: a quadratic Bézier whose control point is the midpoint traces a line.
     _ctrl.addVectors(_a, _b).multiplyScalar(0.5);
-    const span = _a.distanceTo(_b);
-    _dir.copy(_ctrl);
-    if (_dir.lengthSq() > 1e-6) _dir.normalize();
-    else _dir.set(0, 1, 0);
-    _ctrl.addScaledVector(_dir, span * 0.28);
-    _ctrl.y += span * 0.24 + 2;
     let off = i * stride;
     for (let s = 0; s < SEG_PER_EDGE; s++) {
       quadPoint(_a, _ctrl, _b, s / SEG_PER_EDGE, _p);
@@ -1131,7 +1084,6 @@ function animate() {
   const idle = performance.now() - lastInteract > IDLE_MS;
   idleFactor = THREE.MathUtils.damp(idleFactor, idle ? 1 : 0, IDLE_RAMP_LAMBDA, dt);
   for (const p of planets) {
-    if (p.orbitSpeed) p.pivot.rotation.y += p.orbitSpeed * dt * idleFactor;
     p.mesh.rotation.y += p.selfSpeed * dt * idleFactor;
   }
   starfield.rotation.y += dt * 0.005 * idleFactor;

@@ -44,11 +44,20 @@ class ChatModelInfo:
 
 
 CHAT_MODEL_OPTIONS: tuple[ChatModelInfo, ...] = (
+    # Callable chat models, grouped by cloud service then provider, then size
+    # and name for easy scanning. Display names, pricing, and size bands live in
+    # apps/streamlit/config/model_pricing.yaml (keep model_id in sync). Bedrock
+    # Nova/Claude use the `apac.` cross-Region inference-profile IDs required in
+    # ap-southeast-2; in-Region models (Qwen3, Gemma, Mistral, NVIDIA, gpt-oss,
+    # GLM) use plain IDs, and Qwen3 `thinking` is suppressed in rag_engine.llm.
+    # Per-account model access must be confirmed on each model card; an
+    # unavailable model resolves to the offline echo model with a warning.
+    # ── Amazon Bedrock ──
     ChatModelInfo(
-        model_id="anthropic.claude-3-5-sonnet-20240620-v1:0",
+        model_id="apac.amazon.nova-micro-v1:0",
         provider="bedrock_converse",
-        label="Claude 3.5 Sonnet (Bedrock)",
-        size="medium",
+        label="Amazon Nova Micro (Bedrock · APAC)",
+        size="small",
         kind="cloud",
         requires_api_key=True,
     ),
@@ -56,36 +65,6 @@ CHAT_MODEL_OPTIONS: tuple[ChatModelInfo, ...] = (
         model_id="amazon.nova-lite-v1:0",
         provider="bedrock_converse",
         label="Amazon Nova Lite (Bedrock)",
-        size="small",
-        kind="cloud",
-        requires_api_key=True,
-    ),
-    ChatModelInfo(
-        model_id="gpt-4o-mini",
-        provider="openai",
-        label="GPT-4o mini (OpenAI)",
-        size="small",
-        kind="cloud",
-        requires_api_key=True,
-    ),
-    ChatModelInfo(
-        model_id="gpt-4o",
-        provider="openai",
-        label="GPT-4o (OpenAI)",
-        size="medium",
-        kind="cloud",
-        requires_api_key=True,
-    ),
-    # ── Curated Bedrock models for ap-southeast-2 (Sydney) ──────────────────────
-    # Nova and Claude use the `apac.` cross-Region inference-profile IDs required in
-    # that Region; Qwen3 is offered in-Region so it uses the plain model IDs (no geo
-    # prefix). Exact IDs and per-account model access must be confirmed on each model
-    # card in the AWS console (Model access); the app's *offered* subset and default
-    # are chosen in .env.defaults (RAG_LLM_MODELS / RAG_DEFAULT_LLM_MODEL).
-    ChatModelInfo(
-        model_id="apac.amazon.nova-micro-v1:0",
-        provider="bedrock_converse",
-        label="Amazon Nova Micro (Bedrock · APAC)",
         size="small",
         kind="cloud",
         requires_api_key=True,
@@ -115,6 +94,14 @@ CHAT_MODEL_OPTIONS: tuple[ChatModelInfo, ...] = (
         requires_api_key=True,
     ),
     ChatModelInfo(
+        model_id="anthropic.claude-3-5-sonnet-20240620-v1:0",
+        provider="bedrock_converse",
+        label="Claude 3.5 Sonnet (Bedrock)",
+        size="medium",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
         model_id="apac.anthropic.claude-sonnet-4-5-20250929-v1:0",
         provider="bedrock_converse",
         label="Claude Sonnet 4.5 (Bedrock · APAC)",
@@ -122,21 +109,107 @@ CHAT_MODEL_OPTIONS: tuple[ChatModelInfo, ...] = (
         kind="cloud",
         requires_api_key=True,
     ),
-    # Qwen3 (in-Region in ap-southeast-2; plain model IDs, no geo prefix). Reasoning
-    # ("thinking") is suppressed via thinking_disabled_model_kwargs in rag_engine.llm.
     ChatModelInfo(
-        model_id="qwen.qwen3-32b-v1:0",
+        model_id="google.gemma-3-4b-it",
         provider="bedrock_converse",
-        label="Qwen3 32B (Bedrock)",
-        size="medium",
+        label="Gemma 3 4B IT (Bedrock)",
+        size="small",
         kind="cloud",
         requires_api_key=True,
     ),
     ChatModelInfo(
-        model_id="qwen.qwen3-next-80b-a3b-v1:0",
+        model_id="google.gemma-3-12b-it",
         provider="bedrock_converse",
-        label="Qwen3 Next 80B A3B (Bedrock)",
-        size="large",
+        label="Gemma 3 12B IT (Bedrock)",
+        size="small",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="google.gemma-3-27b-it",
+        provider="bedrock_converse",
+        label="Gemma 3 27B IT (Bedrock)",
+        size="small",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="mistral.ministral-3-14b-instruct",
+        provider="bedrock_converse",
+        label="Ministral 14B 3.0 (Bedrock)",
+        size="small",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="mistral.ministral-3-3b-instruct",
+        provider="bedrock_converse",
+        label="Ministral 3B 3.0 (Bedrock)",
+        size="small",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="mistral.ministral-3-8b-instruct",
+        provider="bedrock_converse",
+        label="Ministral 8B 3.0 (Bedrock)",
+        size="small",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="mistral.mistral-7b-instruct-v0:2",
+        provider="bedrock_converse",
+        label="Mistral 7B Instruct (Bedrock)",
+        size="small",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="nvidia.nemotron-nano-3-30b",
+        provider="bedrock_converse",
+        label="Nemotron Nano 3 30B (Bedrock)",
+        size="small",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="nvidia.nemotron-nano-9b-v2",
+        provider="bedrock_converse",
+        label="Nemotron Nano 9B v2 (Bedrock)",
+        size="small",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="openai.gpt-oss-120b-1:0",
+        provider="bedrock_converse",
+        label="gpt-oss-120b (Bedrock)",
+        size="small",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="openai.gpt-oss-20b-1:0",
+        provider="bedrock_converse",
+        label="gpt-oss-20b (Bedrock)",
+        size="small",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="qwen.qwen3-32b-v1:0",
+        provider="bedrock_converse",
+        label="Qwen3 32B (Bedrock)",
+        size="small",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="qwen.qwen3-coder-30b-a3b-v1:0",
+        provider="bedrock_converse",
+        label="Qwen3 Coder 30B A3B (Bedrock)",
+        size="small",
         kind="cloud",
         requires_api_key=True,
     ),
@@ -149,6 +222,120 @@ CHAT_MODEL_OPTIONS: tuple[ChatModelInfo, ...] = (
         requires_api_key=True,
     ),
     ChatModelInfo(
+        model_id="qwen.qwen3-next-80b-a3b-v1:0",
+        provider="bedrock_converse",
+        label="Qwen3 Next 80B A3B (Bedrock)",
+        size="large",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="zai.glm-4.7-flash",
+        provider="bedrock_converse",
+        label="GLM 4.7 Flash (Bedrock)",
+        size="small",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    # ── OpenAI API ──
+    ChatModelInfo(
+        model_id="gpt-4.1-nano",
+        provider="openai",
+        label="GPT-4.1 nano (OpenAI)",
+        size="small",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="gpt-4o-mini",
+        provider="openai",
+        label="GPT-4o mini (OpenAI)",
+        size="small",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="gpt-5-nano",
+        provider="openai",
+        label="GPT-5 nano (OpenAI)",
+        size="small",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="gpt-4.1-mini",
+        provider="openai",
+        label="GPT-4.1 mini (OpenAI)",
+        size="medium",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="gpt-5-mini",
+        provider="openai",
+        label="GPT-5 mini (OpenAI)",
+        size="medium",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="gpt-5.4-nano",
+        provider="openai",
+        label="GPT-5.4 nano (OpenAI)",
+        size="medium",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="gpt-5.6-luna",
+        provider="openai",
+        label="GPT-5.6 Luna (OpenAI)",
+        size="medium",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="gpt-4.1",
+        provider="openai",
+        label="GPT-4.1 (OpenAI)",
+        size="large",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="gpt-4o",
+        provider="openai",
+        label="GPT-4o (OpenAI)",
+        size="large",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="gpt-5",
+        provider="openai",
+        label="GPT-5 (OpenAI)",
+        size="large",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="gpt-5.4-mini",
+        provider="openai",
+        label="GPT-5.4 mini (OpenAI)",
+        size="large",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    ChatModelInfo(
+        model_id="o3",
+        provider="openai",
+        label="o3 (OpenAI)",
+        size="large",
+        kind="cloud",
+        requires_api_key=True,
+    ),
+    # ── Offline fallback ──
+    ChatModelInfo(
         model_id=ECHO_MODEL,
         provider=ECHO_PROVIDER,
         label="Echo (offline, no answer generation)",
@@ -158,9 +345,10 @@ CHAT_MODEL_OPTIONS: tuple[ChatModelInfo, ...] = (
     ),
 )
 
-# Default targets AWS Bedrock (matching the default Titan embeddings); without
+# Library default targets AWS Bedrock Claude (matching the default Titan
+# embeddings); the app overrides it via RAG_DEFAULT_LLM_MODEL. Without
 # credentials, resolution falls back to the offline echo model with a warning.
-DEFAULT_CHAT_MODEL = CHAT_MODEL_OPTIONS[0].model_id
+DEFAULT_CHAT_MODEL = "anthropic.claude-3-5-sonnet-20240620-v1:0"
 
 _INFO_BY_ID = {info.model_id: info for info in CHAT_MODEL_OPTIONS}
 

@@ -52,6 +52,14 @@ def test_local_time_label_passes_through_bad_value() -> None:
     assert local_time_label("2026-07-04T10:00:00+00:00")
 
 
+def test_local_time_label_abbreviates_month_when_requested() -> None:
+    full = local_time_label("2026-07-04T10:00:00+00:00")
+    short = local_time_label("2026-07-04T10:00:00+00:00", abbreviate_month=True)
+
+    assert "July" in full
+    assert "Jul" in short and "July" not in short  # three-letter month for the txn table
+
+
 def test_kv_grid_html_escapes_and_right_aligns_values() -> None:
     grid = kv_grid_html([("Model", "a & b"), ("Tone", "Neutral")])
 

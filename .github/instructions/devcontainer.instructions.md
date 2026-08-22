@@ -40,7 +40,9 @@ Streamlit app dependencies, including `streamlit`, live in `apps/streamlit/pypro
 the app depends on `rag-playground[crawl,vector,bedrock,openai,rag]` so installing it pulls the
 crawler, indexing backends, and the RAG engine. It also pulls `python-dotenv` and
 `pydantic-settings` for the app's env-driven, non-secret settings layer
-(`app_support.settings`, loaded `.env.defaults` → `.env` → environment).
+(`app_support.settings`, loaded `.env.defaults` → `.env` → environment), and `PyYAML`
+for the RAG model pricing/metadata catalog (`config/model_pricing.yaml`, read by
+`app_support.model_pricing`).
 
 Cloud embedding credentials are read from the environment (`AWS_ACCESS_KEY_ID`,
 `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `OPENAI_API_KEY`). See `.env.example`. In

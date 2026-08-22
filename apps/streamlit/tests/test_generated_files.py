@@ -29,10 +29,12 @@ from app_support.generated_files import (
     format_run_timestamp_label,
     generated_file_sort_key,
     generated_files_cache_token,
+    import_sample_fixture,
     import_signed_zip,
     import_target_name,
     is_history_folder,
     is_run_folder,
+    list_sample_fixtures,
 )
 
 _MODIFIED_AT = datetime(2026, 5, 17, 10, 0, tzinfo=timezone.utc)
@@ -299,6 +301,74 @@ def test_import_signed_zip_rejects_wrong_secret(tmp_path: Path) -> None:
     signed = build_folder_zip_bytes(session, "crawl_01_river", signing_secret="k")
 
     assert import_signed_zip(session, signed, "other") is None
+
+
+def _write_fixture_zip(fixtures_root: Path, category: str, folder: str) -> None:
+    """Build an unsigned folder zip and store it as a sample fixture on disk."""
+    source = fixtures_root.parent / "_src"
+    (source / folder / "final").mkdir(parents=True, exist_ok=True)
+    (source / folder / "final" / "page.md").write_text("hello", encoding="utf-8")
+    category_dir = fixtures_root / category
+    category_dir.mkdir(parents=True, exist_ok=True)
+    (category_dir / f"{folder}.zip").write_bytes(build_folder_zip_bytes(source, folder))
+
+
+def test_list_sample_fixtures_reports_category_and_size(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixtures_root = tmp_path / "fixtures"
+    _write_fixture_zip(fixtures_root, "crawl_results", "crawl_01_river")
+    _write_fixture_zip(fixtures_root, "vector_indexes", "vector_01_slate")
+    monkeypatch.setattr("app_support.generated_files.FIXTURES_ROOT", fixtures_root)
+
+    fixtures = list_sample_fixtures()
+
+    assert {f.category for f in fixtures} == {"crawl_results", "vector_indexes"}
+    assert all(f.name.endswith(".zip") and f.size_bytes > 0 for f in fixtures)
+
+
+def test_list_sample_fixtures_empty_when_folder_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("app_support.generated_files.FIXTURES_ROOT", tmp_path / "nope")
+
+    assert list_sample_fixtures() == []
+
+
+def test_import_sample_fixture_extracts_to_conflict_free_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixtures_root = tmp_path / "fixtures"
+    _write_fixture_zip(fixtures_root, "crawl_results", "crawl_01_river")
+    monkeypatch.setattr("app_support.generated_files.FIXTURES_ROOT", fixtures_root)
+    session = tmp_path / "session"
+    (session / "crawl_01_river").mkdir(parents=True)
+
+    new_name = import_sample_fixture(session, "crawl_results", "crawl_01_river.zip")
+
+    assert new_name == "crawl_02_river"
+    assert (session / "crawl_02_river" / "final" / "page.md").read_text(encoding="utf-8") == "hello"
+
+
+def test_import_sample_fixture_rejects_path_traversal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixtures_root = tmp_path / "fixtures"
+    fixtures_root.mkdir()
+    (tmp_path / "secret.zip").write_bytes(b"PK")
+    monkeypatch.setattr("app_support.generated_files.FIXTURES_ROOT", fixtures_root)
+
+    assert import_sample_fixture(tmp_path / "session", "..", "secret.zip") is None
+
+
+def test_import_sample_fixture_missing_returns_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixtures_root = tmp_path / "fixtures"
+    (fixtures_root / "crawl_results").mkdir(parents=True)
+    monkeypatch.setattr("app_support.generated_files.FIXTURES_ROOT", fixtures_root)
+
+    assert import_sample_fixture(tmp_path / "session", "crawl_results", "nope.zip") is None
 
 
 # ── delete_generated_folder ────────────────────────────────────────────────

@@ -18,7 +18,8 @@ def test_settings_load_values_from_env_defaults() -> None:
         settings.basic_rag_qa_prompt_template_file
         == "apps/streamlit/config/basic_rag_qa_prompt.txt"
     )
-    assert settings.basic_rag_qa_session_token_quota == 100000
+    assert settings.basic_rag_qa_session_token_quota == 5700000
+    assert settings.basic_rag_qa_session_cost_quota == 1.0
     assert "Neutral" in settings.basic_rag_qa_tones.split(",")
     assert "echo" not in settings.rag_llm_models.split(",")
     assert "qwen.qwen3-32b-v1:0" in settings.rag_llm_models.split(",")

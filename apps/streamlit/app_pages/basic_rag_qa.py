@@ -11,6 +11,8 @@ lifting lives in ``rag_engine`` (prompt builder, streaming) and the app helpers
 
 from __future__ import annotations
 
+import csv
+import io
 import time
 from collections.abc import Sequence
 from dataclasses import asdict
@@ -32,6 +34,7 @@ from rag_engine.models import TokenUsage
 from app_support.basic_rag_qa.basic_rag_qa_form_ui import (
     apply_maximized_prompt,
     basic_rag_qa_template_is_valid,
+    cost_usage_percent,
     resolve_basic_rag_qa_prompt_template,
     token_totals,
     tone_choices,
@@ -47,6 +50,13 @@ from app_support.basic_rag_qa.basic_rag_qa_history import (
 )
 from app_support.focus import focus_widget
 from app_support.i18n import Strings, get_strings
+from app_support.model_pricing import (
+    estimate_cost,
+    get_model_price,
+    pricing_captured,
+    pricing_sources,
+    render_pricing_markdown,
+)
 from app_support.rag_shared.index_catalog import IndexRef
 from app_support.rag_shared.llm_form_ui import (
     chat_model_choices,
@@ -73,6 +83,12 @@ _settings = get_settings()
 _DEFAULT_TOP_RESULTS = _settings.basic_rag_qa_top_results
 _DEFAULT_RESULT_TAB = _settings.semantic_search_default_tab
 _MAX_TOP_RESULTS = 20
+# Estimated costs show 4 decimals; a positive cost that rounds below this would
+# read as $0.0000, so show a "< minimum" hint instead.
+_COST_DECIMALS = 4
+_COST_UNDER_MIN = 5e-5
+# Filename for the Transaction history CSV export.
+_TXN_CSV_FILENAME = "basic_rag_qa_transactions.csv"
 _PROMPT_FIELD_HEIGHT = 260
 # The maximized editor is a wide dialog with a tall text area, sized close to the
 # viewport via scoped CSS (mirrors the file-preview dialog's ``:has()`` approach).
@@ -97,36 +113,21 @@ div[data-testid="stDialog"]:has(.{_MAXIMIZE_DIALOG_SCOPE_CLASS}) .stTextArea tex
 </style>
 """
 _PANEL_COLUMN_WIDTHS = (0.8, 0.2)
-# The Token count panel packs five metrics in one row; shrink the metric value
-# font and keep it on one line so six-figure counts (e.g. 100,000) never wrap or
-# truncate. It also tightens the panel title's and metrics' default vertical
-# padding so the panel reads as one compact block, consistent with the other
-# components on the page. Scoped via a hidden marker (mirrors the dialog CSS).
+# The Token usage panel packs five metrics in one row inside a collapsible
+# expander; keep each metric value on one line so a six-figure count never wraps
+# beside its icon. A hidden marker scopes the rule to this panel (mirrors the
+# dialog CSS); its own element is hidden so it adds no vertical gap on top.
 _TOKEN_PANEL_SCOPE_CLASS = "basic-rag-qa-token-panel"
 _TOKEN_PANEL_CSS = f"""
 <div class="{_TOKEN_PANEL_SCOPE_CLASS}" style="display:none"></div>
 <style>
-div[data-testid="stVerticalBlockBorderWrapper"]:has(.{_TOKEN_PANEL_SCOPE_CLASS})
+div[data-testid="stElementContainer"]:has(.{_TOKEN_PANEL_SCOPE_CLASS}) {{
+    display: none;
+}}
+div[data-testid="stExpander"]:has(.{_TOKEN_PANEL_SCOPE_CLASS})
     div[data-testid="stMetricValue"] {{
     font-size: 1.4rem;
     white-space: nowrap;
-}}
-div[data-testid="stVerticalBlockBorderWrapper"]:has(.{_TOKEN_PANEL_SCOPE_CLASS})
-    div[data-testid="stMarkdownContainer"] p {{
-    margin-top: 0;
-    margin-bottom: 0;
-}}
-div[data-testid="stVerticalBlockBorderWrapper"]:has(.{_TOKEN_PANEL_SCOPE_CLASS})
-    div[data-testid="stMetric"] {{
-    padding-top: 0;
-    padding-bottom: 0;
-}}
-div[data-testid="stVerticalBlockBorderWrapper"]:has(.{_TOKEN_PANEL_SCOPE_CLASS})
-    div[data-testid="stVerticalBlock"] {{
-    gap: 0.25rem;
-}}
-div[data-testid="stVerticalBlockBorderWrapper"]:has(.{_TOKEN_PANEL_SCOPE_CLASS}) > div {{
-    padding-bottom: 0.5rem;
 }}
 </style>
 """
@@ -159,7 +160,26 @@ _FOCUS_PROMPT_KEY = "basic_rag_qa_focus_prompt"
 # reruns, and a one-shot flag set when a save is rejected for bad placeholders.
 _TEMPLATE_EDIT_KEY = "basic_rag_qa_template_edit"
 _EDIT_TEMPLATE_OPEN_KEY = "basic_rag_qa_edit_template_open"
+# The read-only model-pricing preview dialog: a wide, scrollable modal scoped via
+# a hidden marker (mirrors the maximize dialog's ``:has()`` approach).
+_PRICING_DIALOG_OPEN_KEY = "basic_rag_qa_pricing_open"
+_PRICING_DIALOG_SCOPE_CLASS = "basic-rag-qa-pricing-scope"
+_PRICING_DIALOG_VIEWPORT_WIDTH = "80vw"
+_PRICING_DIALOG_MAX_HEIGHT = "82vh"
+_PRICING_DIALOG_CSS = f"""
+<div class="{_PRICING_DIALOG_SCOPE_CLASS}" style="display:none"></div>
+<style>
+div[data-testid="stDialog"]:has(.{_PRICING_DIALOG_SCOPE_CLASS}) [role="dialog"][aria-modal="true"] {{
+    width: {_PRICING_DIALOG_VIEWPORT_WIDTH} !important;
+    max-width: {_PRICING_DIALOG_VIEWPORT_WIDTH} !important;
+    max-height: {_PRICING_DIALOG_MAX_HEIGHT} !important;
+}}
+</style>
+"""
 _TEMPLATE_INVALID_KEY = "basic_rag_qa_template_invalid"
+# Session-state contract with the shell: a page sets this to a localized success
+# message; the shell (app_pages must not call st.toast) fires it once next run.
+_PAGE_TOAST_KEY = "pending_page_toast"
 
 
 def render_page(context: RagPageContext) -> None:
@@ -235,6 +255,8 @@ def render_page(context: RagPageContext) -> None:
         _prompt_maximize_dialog(strings)
     if st.session_state.get(_EDIT_TEMPLATE_OPEN_KEY):
         _edit_template_dialog(strings, session_root)
+    if st.session_state.get(_PRICING_DIALOG_OPEN_KEY):
+        _pricing_dialog(strings)
 
     records = load_basic_rag_qa_history(session_root)
     _render_token_summary(strings, records)
@@ -362,7 +384,7 @@ def _render_prompt_form(
     return prompt_text, send, maximize, answer_slot
 
 
-def _apply_and_close_maximized_prompt() -> None:
+def _apply_and_close_maximized_prompt(strings: Strings) -> None:
     """Write the maximized editor's text back to the inline prompt, then close.
 
     Bound to the dialog's Apply button: it copies the edited text into the inline
@@ -374,6 +396,7 @@ def _apply_and_close_maximized_prompt() -> None:
         st.session_state, source_key=_PROMPT_MAX_KEY, target_key=_PROMPT_PENDING_KEY
     )
     st.session_state[_MAXIMIZE_OPEN_KEY] = False
+    st.session_state[_PAGE_TOAST_KEY] = strings["BASIC_QA_MAXIMIZE_APPLIED_TOAST"]
 
 
 def _on_maximize_dismiss() -> None:
@@ -390,7 +413,10 @@ def _prompt_maximize_dialog(strings: Strings) -> None:
     edits, leaving the inline prompt unchanged.
     """
     st.markdown(
-        f"{_MAXIMIZE_DIALOG_CSS}\n\n**{strings['BASIC_QA_MAXIMIZE_TITLE']}**",
+        f"{_MAXIMIZE_DIALOG_CSS}\n\n"
+        f"**{strings['BASIC_QA_MAXIMIZE_TITLE']}**  \n"
+        f"<span style='opacity:0.6;font-size:0.875rem'>"
+        f"{strings['BASIC_QA_MAXIMIZE_CAPTION']}</span>",
         unsafe_allow_html=True,
     )
     st.text_area(
@@ -400,12 +426,13 @@ def _prompt_maximize_dialog(strings: Strings) -> None:
         key=_PROMPT_MAX_KEY,
     )
     with st.container(horizontal_alignment="right"):
-        st.button(
+        if st.button(
             strings["BASIC_QA_MAXIMIZE_APPLY"],
             type="primary",
             icon=":material/check:",
-            on_click=_apply_and_close_maximized_prompt,
-        )
+        ):
+            _apply_and_close_maximized_prompt(strings)
+            st.rerun()
 
 
 def _open_edit_template(session_root: Path) -> None:
@@ -415,7 +442,7 @@ def _open_edit_template(session_root: Path) -> None:
     st.session_state[_EDIT_TEMPLATE_OPEN_KEY] = True
 
 
-def _save_template(session_root: Path) -> None:
+def _save_template(strings: Strings, session_root: Path) -> None:
     """Persist the edited template; keep the dialog open with a warning if invalid."""
     template = st.session_state.get(_TEMPLATE_EDIT_KEY, "")
     if not basic_rag_qa_template_is_valid(template):
@@ -423,13 +450,15 @@ def _save_template(session_root: Path) -> None:
         return
     save_basic_rag_qa_template(session_root, template)
     st.session_state[_EDIT_TEMPLATE_OPEN_KEY] = False
+    st.session_state[_PAGE_TOAST_KEY] = strings["BASIC_QA_TEMPLATE_SAVED_TOAST"]
 
 
-def _reset_template(session_root: Path) -> None:
-    """Delete the session template and reseed the editor from the default."""
+def _reset_template(strings: Strings, session_root: Path) -> None:
+    """Delete the session template, then close the dialog with a toast."""
     reset_basic_rag_qa_template(session_root)
-    st.session_state[_TEMPLATE_EDIT_KEY] = resolve_basic_rag_qa_prompt_template()
     st.session_state[_TEMPLATE_INVALID_KEY] = False
+    st.session_state[_EDIT_TEMPLATE_OPEN_KEY] = False
+    st.session_state[_PAGE_TOAST_KEY] = strings["BASIC_QA_TEMPLATE_RESET_TOAST"]
 
 
 def _on_edit_template_dismiss() -> None:
@@ -462,20 +491,20 @@ def _edit_template_dialog(strings: Strings, session_root: Path) -> None:
     )
     reset_col, save_col = st.columns(2, vertical_alignment="center")
     with reset_col:
-        st.button(
+        if st.button(
             strings["BASIC_QA_EDIT_TEMPLATE_RESET"],
             icon=":material/restart_alt:",
-            on_click=_reset_template,
-            args=(session_root,),
-        )
+        ):
+            _reset_template(strings, session_root)
+            st.rerun()
     with save_col, st.container(horizontal_alignment="right"):
-        st.button(
+        if st.button(
             strings["BASIC_QA_EDIT_TEMPLATE_SAVE"],
             type="primary",
             icon=":material/check:",
-            on_click=_save_template,
-            args=(session_root,),
-        )
+        ):
+            _save_template(strings, session_root)
+            st.rerun()
 
 
 def _render_search_results(
@@ -612,31 +641,211 @@ def _render_stored_answer(strings: Strings) -> None:
             st.caption(caption)
 
 
-def _render_token_summary(strings: Strings, records: Sequence[BasicQaRecord]) -> None:
-    """Render the session Token count panel: token totals plus budget metrics.
+def _record_cost(record: BasicQaRecord) -> float | None:
+    """Estimated USD cost for one recorded request, or None when it can't be priced."""
+    return estimate_cost(record.llm_model, record.input_tokens, record.output_tokens)
 
-    Five equal metrics — Input / Output / Total counts first, then Quota and
-    % Usage (session total ÷ quota, floored). Display-only: the quota never blocks
-    a send. Counts are thousands-separated and kept on one line (scoped CSS) so a
-    six-figure value never wraps.
+
+def _session_cost(records: Sequence[BasicQaRecord]) -> float | None:
+    """Sum the priced requests' estimated USD cost; None when none can be priced."""
+    priced = [cost for record in records if (cost := _record_cost(record)) is not None]
+    return sum(priced) if priced else None
+
+
+def _session_input_cost(records: Sequence[BasicQaRecord]) -> float | None:
+    """Sum the priced requests' estimated USD input-token cost; None when unpriced."""
+    priced = [
+        cost
+        for record in records
+        if (cost := estimate_cost(record.llm_model, record.input_tokens, 0)) is not None
+    ]
+    return sum(priced) if priced else None
+
+
+def _session_output_cost(records: Sequence[BasicQaRecord]) -> float | None:
+    """Sum the priced requests' estimated USD output-token cost; None when unpriced."""
+    priced = [
+        cost
+        for record in records
+        if (cost := estimate_cost(record.llm_model, 0, record.output_tokens)) is not None
+    ]
+    return sum(priced) if priced else None
+
+
+def _format_cost(strings: Strings, cost: float | None) -> str:
+    """Render a USD cost estimate, the n/a dash, or a below-minimum hint."""
+    if cost is None:
+        return strings["BASIC_QA_TOKEN_NA"]
+    if 0 < cost < _COST_UNDER_MIN:
+        return strings["BASIC_QA_COST_UNDER_MIN"]
+    return f"${cost:,.{_COST_DECIMALS}f}"
+
+
+def _cost_delta(strings: Strings, cost: float | None) -> str | None:
+    """Format a USD cost as a neutral metric delta, or None to omit it."""
+    return None if cost is None else _format_cost(strings, cost)
+
+
+def _on_pricing_dismiss() -> None:
+    """Close the read-only pricing preview (X / click-away / Esc)."""
+    st.session_state[_PRICING_DIALOG_OPEN_KEY] = False
+
+
+@st.dialog(" ", width="large", on_dismiss=_on_pricing_dismiss)
+def _pricing_dialog(strings: Strings) -> None:
+    """Show the current model pricing catalog as a read-only Markdown table."""
+    st.markdown(
+        f"{_PRICING_DIALOG_CSS}\n\n**{strings['BASIC_QA_PRICING_TITLE']}**",
+        unsafe_allow_html=True,
+    )
+    st.markdown(render_pricing_markdown())
+
+
+def _render_token_summary(strings: Strings, records: Sequence[BasicQaRecord]) -> None:
+    """Render the collapsible Token usage panel: token totals plus budget metrics.
+
+    Five equal metrics, each a token/count on top and its USD figure below (a
+    neutral delta): Input / Output / Total, then the static Quota (token budget /
+    cost budget) and Usage (tokens ÷ token quota, floored; cost ÷ cost quota).
+    Display-only: neither quota blocks a send. A nested Transaction history table
+    breaks the cost down per request. Counts are thousands-separated and kept on
+    one line (scoped CSS) so a six-figure value never wraps beside its icon.
     """
     totals = token_totals(records)
     quota = _settings.basic_rag_qa_session_token_quota
+    cost_quota = _settings.basic_rag_qa_session_cost_quota
     percent = usage_percent(totals.total_tokens, quota)
-    with st.container(border=True):
-        # The blank line (\n\n) is load-bearing: it closes the CSS HTML block so the
-        # following **title** renders as bold markdown, not literal text. Folding the
-        # CSS into the title's element keeps it from adding an empty spacer on top.
-        st.markdown(
-            f"{_TOKEN_PANEL_CSS}\n\n**{strings['BASIC_QA_TOKEN_PANEL_TITLE']}**",
-            unsafe_allow_html=True,
-        )
+    session_cost = _session_cost(records)
+    cost_percent = cost_usage_percent(session_cost, cost_quota)
+    with st.expander(strings["BASIC_QA_TOKEN_PANEL_TITLE"], expanded=False):
+        st.markdown(_TOKEN_PANEL_CSS, unsafe_allow_html=True)
         input_col, output_col, total_col, quota_col, usage_col = st.columns(5)
-        input_col.metric(strings["BASIC_QA_SUMMARY_INPUT_LABEL"], f"{totals.input_tokens:,}")
-        output_col.metric(strings["BASIC_QA_SUMMARY_OUTPUT_LABEL"], f"{totals.output_tokens:,}")
-        total_col.metric(strings["BASIC_QA_SUMMARY_TOTAL_LABEL"], f"{totals.total_tokens:,}")
-        quota_col.metric(strings["BASIC_QA_SUMMARY_QUOTA_LABEL"], f"{quota:,}")
-        usage_col.metric(strings["BASIC_QA_SUMMARY_USAGE_LABEL"], f"{percent}%")
+        input_col.metric(
+            strings["BASIC_QA_SUMMARY_INPUT_LABEL"],
+            f"{totals.input_tokens:,}",
+            delta=_cost_delta(strings, _session_input_cost(records)),
+            delta_color="off",
+            icon=":material/login:",
+        )
+        output_col.metric(
+            strings["BASIC_QA_SUMMARY_OUTPUT_LABEL"],
+            f"{totals.output_tokens:,}",
+            delta=_cost_delta(strings, _session_output_cost(records)),
+            delta_color="off",
+            icon=":material/logout:",
+        )
+        total_col.metric(
+            strings["BASIC_QA_SUMMARY_TOTAL_LABEL"],
+            f"{totals.total_tokens:,}",
+            delta=_cost_delta(strings, session_cost),
+            delta_color="off",
+            icon=":material/functions:",
+        )
+        quota_col.metric(
+            strings["BASIC_QA_SUMMARY_QUOTA_LABEL"],
+            f"{quota:,}",
+            delta=f"${cost_quota:,.2f}",
+            delta_color="off",
+            icon=":material/data_usage:",
+        )
+        usage_col.metric(
+            strings["BASIC_QA_SUMMARY_USAGE_LABEL"],
+            f"{percent}%",
+            delta=None if cost_percent is None else f"{cost_percent:.2f}%",
+            delta_color="off",
+            icon=":material/percent:",
+        )
+        _render_transaction_history(strings, records)
+
+
+def _transaction_rows(
+    strings: Strings, records: Sequence[BasicQaRecord]
+) -> list[dict[str, object]]:
+    """Build the Transaction history rows, newest first, one per recorded request.
+
+    Only answer-generation requests are recorded today; the Process column names
+    the step so future process types (e.g. semantic search) can share the table.
+    """
+    na = strings["BASIC_QA_TOKEN_NA"]
+    process = strings["BASIC_QA_PROCESS_ANSWER_GEN"]
+    ordered = sorted(records, key=lambda record: record.timestamp_utc, reverse=True)
+    rows: list[dict[str, object]] = []
+    for record in ordered:
+        price = get_model_price(record.llm_model)
+        rows.append(
+            {
+                strings["BASIC_QA_TXN_COL_TIME"]: local_time_label(
+                    record.timestamp_utc, abbreviate_month=True
+                ),
+                strings["BASIC_QA_HISTORY_META_MODEL"]: record.llm_model or "—",
+                strings["BASIC_QA_TXN_COL_PROVIDER"]: price.provider if price else na,
+                strings["BASIC_QA_TXN_COL_CLOUD"]: price.cloud_service if price else na,
+                strings["BASIC_QA_SUMMARY_INPUT_LABEL"]: na
+                if record.input_tokens is None
+                else record.input_tokens,
+                strings["BASIC_QA_SUMMARY_OUTPUT_LABEL"]: na
+                if record.output_tokens is None
+                else record.output_tokens,
+                strings["BASIC_QA_SUMMARY_TOTAL_LABEL"]: na
+                if record.total_tokens is None
+                else record.total_tokens,
+                strings["BASIC_QA_TXN_COL_COST"]: _format_cost(strings, _record_cost(record)),
+                strings["BASIC_QA_TXN_COL_PROCESS"]: process,
+            }
+        )
+    return rows
+
+
+def _transaction_csv(rows: list[dict[str, object]]) -> str:
+    """Serialize the Transaction history rows to CSV text (localized headers)."""
+    if not rows:
+        return ""
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=list(rows[0].keys()))
+    writer.writeheader()
+    writer.writerows(rows)
+    return buffer.getvalue()
+
+
+def _render_cost_disclaimer(strings: Strings) -> None:
+    """Caption below the table noting costs are estimates, citing the price sources."""
+    captured = pricing_captured()
+    sources = pricing_sources()
+    if not captured and not sources:
+        return
+    links = ", ".join(f"[{source.name}]({source.url})" for source in sources)
+    st.caption(
+        strings["BASIC_QA_COST_DISCLAIMER"].format(
+            date=captured or strings["BASIC_QA_TOKEN_NA"],
+            sources=links or strings["BASIC_QA_TOKEN_NA"],
+        )
+    )
+
+
+def _render_transaction_history(strings: Strings, records: Sequence[BasicQaRecord]) -> None:
+    """Render the collapsed per-request token log nested in the Token usage panel."""
+    with st.expander(strings["BASIC_QA_TXN_PANEL_TITLE"], expanded=False):
+        rows = _transaction_rows(strings, records)
+        if not rows:
+            st.caption(strings["BASIC_QA_TXN_EMPTY"])
+            return
+        with st.container(horizontal=True, horizontal_alignment="right"):
+            if st.button(
+                strings["BASIC_QA_PRICING_LABEL"],
+                icon=":material/request_quote:",
+                help=strings["BASIC_QA_PRICING_HELP"],
+            ):
+                st.session_state[_PRICING_DIALOG_OPEN_KEY] = True
+            st.download_button(
+                strings["BASIC_QA_TXN_CSV_LABEL"],
+                data=_transaction_csv(rows),
+                file_name=_TXN_CSV_FILENAME,
+                mime="text/csv",
+                icon=":material/download:",
+                help=strings["BASIC_QA_TXN_CSV_HELP"],
+            )
+        st.dataframe(rows, hide_index=True, width="stretch")
+        _render_cost_disclaimer(strings)
 
 
 def _stats_caption(
@@ -739,7 +948,12 @@ def _render_basic_rag_qa_history(
                 )
                 with (
                     actions,
-                    st.container(horizontal=True, horizontal_alignment="right", gap="small", key=f"basic_rag_qa_history_actions_{position}"),
+                    st.container(
+                        horizontal=True,
+                        horizontal_alignment="right",
+                        gap="small",
+                        key=f"basic_rag_qa_history_actions_{position}",
+                    ),
                 ):
                     pin_help = (
                         strings["BASIC_QA_HISTORY_UNPIN_HELP"]

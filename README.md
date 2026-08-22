@@ -35,6 +35,7 @@ The libraries are UI-independent and enforced separate by boundary tests; the St
 - **Vector indexing (Step 2)** — index `.md` / `.txt` / `.zip` outputs into a langchain-chroma (ChromaDB) vector store with configurable chunking and embedding backends (Amazon Titan, OpenAI, or an offline default); crawl run metadata is dropped and every chunk is stamped with its page `Source: [title](url)`
 - **RAG Q&A (Steps 3–4)** — semantic search plus a Basic RAG Q&A page that retrieves knowledge, builds an editable, grounded prompt, and streams a language-model answer with token/latency stats
 - **Conversational RAG (Step 5)** — history-aware chat that rewrites each follow-up before retrieving, keeping in-session memory
+- **Start from sample data** — a one-click **Sample data** panel imports a ready-made crawl or vector index from `data/fixtures/`, so you can skip Steps 1–2 (crawling and indexing) and jump straight to semantic search and RAG
 - **LangChain backends** — embeddings, vector store, and chat models are wrapped with LangChain; an offline echo model lets RAG run with no cloud credentials
 
 ## Set up local development
@@ -96,6 +97,16 @@ ruff check .                # lint
 ```
 
 **Prefer not to install anything?** Open the repo in GitHub Codespaces (badge above) or VS Code Dev Containers — the container installs all of the above and auto-starts the app at `http://localhost:8501`. See [docs/INSTALLATION.md](docs/INSTALLATION.md). Or open `notebooks/crawl4md.ipynb` for the notebook workflow.
+
+## Start from sample data (skip crawling)
+
+New to the app, or want to explore the RAG steps without spending the time and cost of a crawl and index? Import a bundled sample instead:
+
+1. Run the app and open the **Output Files → Sample data** panel.
+2. Expand **Crawl results** or **Vector indexes** and click a sample (e.g. `vector_01_slate.zip • 20 MB`).
+3. It imports into your session as a normal `crawl_*` / `vector_*` folder. A **Vector indexes** sample is a ready-made index — jump straight to **Step 3 (Semantic search)**; a **Crawl results** sample lets you run **Step 2 (indexing)** without crawling.
+
+The samples live in [`data/fixtures/`](data/fixtures). Importing works offline, but *querying* an imported index re-embeds your question with the embedding model recorded in its manifest — the bundled index uses Amazon Titan on Bedrock, so semantic search over it needs those credentials (see [Configuration](docs/CONFIGURATION.md)).
 
 ## Use the libraries without Streamlit
 

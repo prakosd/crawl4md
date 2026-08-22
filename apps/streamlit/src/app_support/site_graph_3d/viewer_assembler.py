@@ -1,10 +1,10 @@
 """Assemble the standalone 3D viewer HTML from the frontend assets.
 
 Pure Python — no Streamlit. Reads the viewer's HTML/CSS/JS assets, inlines them
-into one self-contained document (three.js still loads from the pinned CDN via
-the import map), and injects the per-crawl graph model plus localized labels.
-The launcher passes the finished HTML to the inline component, which turns it
-into a Blob and opens it in a new tab.
+into one self-contained document (three.js and d3-force still load from pinned
+CDNs via the import map), and injects the per-crawl graph model plus localized
+labels. The launcher passes the finished HTML to the inline component, which
+turns it into a Blob and opens it in a new tab.
 """
 
 from __future__ import annotations
@@ -17,7 +17,14 @@ from typing import Any
 
 from app_support.site_graph_3d.graph_data import build_site_graph_model
 
-__all__ = ["TEXTURE_CDN_BASE", "THREE_CDN_BASE", "THREE_VERSION", "build_viewer_html"]
+__all__ = [
+    "D3_FORCE_CDN",
+    "D3_FORCE_VERSION",
+    "TEXTURE_CDN_BASE",
+    "THREE_CDN_BASE",
+    "THREE_VERSION",
+    "build_viewer_html",
+]
 
 # Pinned so the new tab always loads a known-good three.js (never @latest). Bump
 # deliberately: the addons (OrbitControls, EffectComposer, UnrealBloomPass) must
@@ -25,6 +32,11 @@ __all__ = ["TEXTURE_CDN_BASE", "THREE_CDN_BASE", "THREE_VERSION", "build_viewer_
 # internet-connected viewer by design.
 THREE_VERSION = "0.160.0"
 THREE_CDN_BASE = f"https://cdn.jsdelivr.net/npm/three@{THREE_VERSION}"
+
+# d3-force computes the viewer's layout in the browser (pinned like three.js): the
+# ES-module bundle that jsdelivr serves at ``/+esm`` resolves via the import map.
+D3_FORCE_VERSION = "3.0.0"
+D3_FORCE_CDN = f"https://cdn.jsdelivr.net/npm/d3-force@{D3_FORCE_VERSION}/+esm"
 
 # Realistic NASA planet/sun/star textures, pinned to a jsdelivr-served commit of
 # the reference solar-system repo (CORS-enabled). The viewer enhances its
@@ -38,6 +50,7 @@ _ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 _STYLE_PLACEHOLDER = "__VIEWER_STYLE__"
 _SCRIPT_PLACEHOLDER = "__VIEWER_SCRIPT__"
 _THREE_BASE_PLACEHOLDER = "__THREE_BASE__"
+_D3_FORCE_PLACEHOLDER = "__D3_FORCE_URL__"
 _TEXTURE_BASE_PLACEHOLDER = "__TEXTURE_BASE_URL__"
 _GRAPH_PLACEHOLDER = "__GRAPH_DATA__"
 _LABELS_PLACEHOLDER = "__LABELS__"
@@ -66,6 +79,7 @@ def _viewer_template() -> str:
         .replace(_STYLE_PLACEHOLDER, _read_asset("viewer.css"))
         .replace(_SCRIPT_PLACEHOLDER, _read_asset("viewer.js"))
         .replace(_THREE_BASE_PLACEHOLDER, THREE_CDN_BASE)
+        .replace(_D3_FORCE_PLACEHOLDER, D3_FORCE_CDN)
         .replace(_TEXTURE_BASE_PLACEHOLDER, TEXTURE_CDN_BASE)
     )
 

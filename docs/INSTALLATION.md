@@ -9,7 +9,9 @@ Requires Python 3.10+ (3.12 or 3.13 recommended).
 A hosted instance runs on Streamlit Community Cloud at
 **<https://rag-playground-prakosd.streamlit.app/>** — open it in a browser to try Steps 1–5 with
 no setup. It answers with the offline echo model unless cloud credentials are configured, and its
-resources are shared and limited, so keep to a small crawl and index for a quick tour.
+resources are shared and limited, so keep to a small crawl and index for a quick tour. To skip
+crawling and indexing entirely, use the in-app **Output Files → Sample data** panel to import a
+ready-made crawl or vector index and jump straight to Steps 3–5.
 
 ## Run without installing anything
 

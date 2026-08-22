@@ -57,10 +57,12 @@ from app_support.generated_files import (
     find_site_graph_for_result,
     format_file_size,
     generated_files_cache_token,
+    import_sample_fixture,
     import_signed_zip,
     import_target_name,
     is_history_folder,
     is_run_folder,
+    list_sample_fixtures,
     zip_top_folder,
 )
 from app_support.i18n import get_strings
@@ -612,6 +614,58 @@ def _import_uploaded_zip(zip_bytes: bytes) -> None:
     st.rerun()
 
 
+_SAMPLE_CATEGORY_CRAWL = "crawl_results"
+_SAMPLE_CATEGORY_VECTOR = "vector_indexes"
+
+
+def _import_sample_fixture_action(category: str, name: str) -> None:
+    """Import a bundled sample into the session, then flag a success toast.
+
+    Ends with a full app rerun (not the fragment-scoped one) so the shell fires
+    the toast — same pattern as the signed-zip import.
+    """
+    added = import_sample_fixture(_session_root(), category, name)
+    if added:
+        st.session_state.sample_import_done_folder = added
+        _cached_list_generated_files.clear()
+        _cached_download_tree.clear()
+    st.rerun()
+
+
+def _render_sample_data_panel() -> None:
+    """Render the collapsed Sample data panel: one-click import of bundled fixtures.
+
+    Lets a user skip Steps 1-2 by importing a ready-made crawl or index into the
+    session, then jump to Semantic search. Trusted repo files, so no signature
+    check. One nested panel per fixtures category; each archive imports on click.
+    """
+    fixtures = list_sample_fixtures()
+    if not fixtures:
+        return
+    strings = get_strings(st.session_state.get("language", _DEFAULT_LANGUAGE))
+    with st.expander(strings["FILES_SAMPLE_PANEL_TITLE"], expanded=False):
+        st.caption(strings["FILES_SAMPLE_PANEL_CAPTION"])
+        for category in sorted({fixture.category for fixture in fixtures}):
+            if category == _SAMPLE_CATEGORY_CRAWL:
+                label = strings["FILES_SAMPLE_CATEGORY_CRAWL_RESULTS"]
+            elif category == _SAMPLE_CATEGORY_VECTOR:
+                label = strings["FILES_SAMPLE_CATEGORY_VECTOR_INDEXES"]
+            else:
+                label = category.replace("_", " ").capitalize()
+            with st.expander(label, expanded=False):
+                for fixture in fixtures:
+                    if fixture.category != category:
+                        continue
+                    if st.button(
+                        label=f"{fixture.name} • {format_file_size(fixture.size_bytes)}",
+                        icon=":material/move_to_inbox:",
+                        help=strings["FILES_SAMPLE_IMPORT_HELP"],
+                        key=f"sample_import_{fixture.category}_{fixture.name}",
+                        disabled=_files_actions_busy(),
+                    ):
+                        _import_sample_fixture_action(fixture.category, fixture.name)
+
+
 @st.dialog(_DIALOG_PLACEHOLDER_TITLE, width="small", on_dismiss=_on_upload_dismiss)
 def _upload_folder_dialog() -> None:
     strings = get_strings(st.session_state.get("language", _DEFAULT_LANGUAGE))
@@ -746,6 +800,8 @@ def _downloads_body() -> None:
         ]
         with st.expander(strings["FILES_HEADER"], expanded=False):
             st.dataframe(rows, hide_index=True, width="stretch")
+
+    _render_sample_data_panel()
 
     _render_open_preview_dialog(files)
     _render_open_delete_folder_dialog()

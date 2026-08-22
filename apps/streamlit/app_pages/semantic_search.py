@@ -245,7 +245,12 @@ def _render_search_history(
                 )
                 with (
                     actions,
-                    st.container(horizontal=True, horizontal_alignment="right", gap="small", key=f"search_history_actions_{position}"),
+                    st.container(
+                        horizontal=True,
+                        horizontal_alignment="right",
+                        gap="small",
+                        key=f"search_history_actions_{position}",
+                    ),
                 ):
                     pin_help = (
                         strings["SEARCH_HISTORY_UNPIN_HELP"]

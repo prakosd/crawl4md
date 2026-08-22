@@ -133,3 +133,15 @@ def usage_percent(total: int, quota: int) -> int:
     if quota <= 0:
         return 0
     return total * 100 // quota
+
+
+def cost_usage_percent(cost: float | None, quota: float) -> float | None:
+    """Return session USD cost as a percent of the cost *quota*, or None.
+
+    Mirrors ``usage_percent`` for dollars: None when nothing is priced yet or the
+    quota is not positive (so a misconfigured budget never divides by zero). May
+    exceed 100 when the session cost is over budget.
+    """
+    if cost is None or quota <= 0:
+        return None
+    return cost / quota * 100.0

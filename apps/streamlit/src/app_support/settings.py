@@ -125,15 +125,21 @@ class Settings(BaseSettings):
     # that file to reword the generated prompt without a code change; a missing
     # or empty file falls back to the built-in rag_engine default.
     basic_rag_qa_prompt_template_file: str
-    # Per-session token budget shown on the Step 4 Token count panel. The panel's
+    # Per-session token budget shown on the Step 4 Token usage panel. The panel's
     # % Usage is the session total divided by this quota. Display-only; it does
     # not block sending.
     basic_rag_qa_session_token_quota: int
+    # Per-session USD cost budget shown beside the token quota (drives the panel's
+    # $ Usage %). Display-only; overridable per deploy; it does not block sending.
+    basic_rag_qa_session_cost_quota: float
     # Language models offered on the RAG pages (comma-separated rag_engine
     # catalog ids), in display order. Unknown ids are ignored.
     rag_llm_models: str
     # The language model pre-selected on the RAG pages.
     rag_default_llm_model: str
+    # Comma-separated size bands (XS, Small, Medium, Large, XL, Frontier) shown in
+    # the RAG model picker; models outside these bands are hidden.
+    rag_llm_size_bands: str
     # Default number of ranked matches shown on the Semantic Search page.
     semantic_search_top_n: int
     # Default open tab for each Semantic Search result card: "raw" or "preview".

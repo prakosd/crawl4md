@@ -196,6 +196,11 @@ STRINGS_ID: Strings = {
     "BASIC_QA_MAXIMIZE_HELP": "Perbesar editor prompt",
     "BASIC_QA_MAXIMIZE_TITLE": "Sunting prompt",
     "BASIC_QA_MAXIMIZE_APPLY": "Terapkan",
+    "BASIC_QA_MAXIMIZE_CAPTION": (
+        "Edit prompt lengkap yang dikirim ke model. Terapkan menyimpan perubahan Anda; "
+        "menutup dengan cara lain akan membuangnya."
+    ),
+    "BASIC_QA_MAXIMIZE_APPLIED_TOAST": "Prompt diperbarui.",
     "BASIC_QA_EDIT_TEMPLATE_BUTTON": "Sunting templat",
     "BASIC_QA_EDIT_TEMPLATE_HELP": (
         "Sunting templat prompt yang diisi oleh Hasilkan prompt. Disimpan untuk sesi ini."
@@ -211,6 +216,8 @@ STRINGS_ID: Strings = {
         "Pertahankan hanya placeholder {question}, {start}, {knowledge}, {end}, dan {tone} — "
         "hapus teks lain dalam kurung kurawal, lalu simpan lagi."
     ),
+    "BASIC_QA_TEMPLATE_SAVED_TOAST": "Templat prompt disimpan.",
+    "BASIC_QA_TEMPLATE_RESET_TOAST": "Templat prompt diatur ulang ke default.",
     "BASIC_QA_NO_PROMPT_HINT": "Hasilkan prompt terlebih dahulu, lalu kirim.",
     "BASIC_QA_ANSWER_HEADER": ":material/smart_toy: Jawaban",
     "BASIC_QA_ANSWER_STATS": (
@@ -218,12 +225,29 @@ STRINGS_ID: Strings = {
         "total {total} · dijawab dalam {seconds}s"
     ),
     "BASIC_QA_TOKEN_NA": "n/a",
-    "BASIC_QA_TOKEN_PANEL_TITLE": "Jumlah token",
+    "BASIC_QA_TOKEN_PANEL_TITLE": ":material/token: Penggunaan token",
     "BASIC_QA_SUMMARY_QUOTA_LABEL": "Kuota",
-    "BASIC_QA_SUMMARY_USAGE_LABEL": "% Pemakaian",
+    "BASIC_QA_SUMMARY_USAGE_LABEL": "Pemakaian",
     "BASIC_QA_SUMMARY_INPUT_LABEL": "Input",
     "BASIC_QA_SUMMARY_OUTPUT_LABEL": "Output",
     "BASIC_QA_SUMMARY_TOTAL_LABEL": "Total",
+    "BASIC_QA_TXN_PANEL_TITLE": ":material/receipt_long: Riwayat transaksi",
+    "BASIC_QA_TXN_COL_TIME": "Tanggal & waktu",
+    "BASIC_QA_TXN_COL_PROVIDER": "Penyedia",
+    "BASIC_QA_TXN_COL_CLOUD": "Layanan cloud",
+    "BASIC_QA_TXN_COL_COST": "Perkiraan biaya (USD)",
+    "BASIC_QA_TXN_COL_PROCESS": "Proses",
+    "BASIC_QA_PROCESS_ANSWER_GEN": "Pembuatan jawaban",
+    "BASIC_QA_TXN_EMPTY": "Belum ada transaksi — kirim prompt untuk mencatat satu.",
+    "BASIC_QA_COST_UNDER_MIN": "< $0.0001",
+    "BASIC_QA_COST_DISCLAIMER": (
+        "Biaya adalah perkiraan kasar dalam USD dari harga publik per {date}. Sumber: {sources}."
+    ),
+    "BASIC_QA_TXN_CSV_LABEL": "Unduh CSV",
+    "BASIC_QA_TXN_CSV_HELP": "Unduh riwayat transaksi sebagai berkas CSV.",
+    "BASIC_QA_PRICING_LABEL": "Harga",
+    "BASIC_QA_PRICING_HELP": "Lihat harga token per model yang dipakai untuk estimasi biaya.",
+    "BASIC_QA_PRICING_TITLE": ":material/request_quote: Harga model",
     "BASIC_QA_HISTORY_EXPANDER": ":material/history: Riwayat prompt",
     "BASIC_QA_HISTORY_EMPTY": "Belum ada prompt — kirim satu untuk membangun riwayat Anda.",
     "BASIC_QA_HISTORY_REPLAY_HELP": "Muat prompt ini kembali ke formulir",
@@ -472,7 +496,17 @@ STRINGS_ID: Strings = {
     ),
     "FILES_UPLOAD_CONFIRM": "Unggah",
     "FILES_UPLOAD_CANCEL": "Batal",
-    "FILES_UPLOAD_SUCCESS": "Unggahan selesai — menambahkan {folder}.",  # ── Ready result download ──────────────────────────────────────────
+    "FILES_UPLOAD_SUCCESS": "Unggahan selesai — menambahkan {folder}.",
+    "FILES_SAMPLE_PANEL_TITLE": ":material/dataset: Data contoh",
+    "FILES_SAMPLE_PANEL_CAPTION": (
+        "Impor crawl atau indeks siap pakai untuk melewati Langkah 1-2 dan langsung "
+        "ke Pencarian semantik."
+    ),
+    "FILES_SAMPLE_CATEGORY_CRAWL_RESULTS": "Hasil crawl",
+    "FILES_SAMPLE_CATEGORY_VECTOR_INDEXES": "Indeks vektor",
+    "FILES_SAMPLE_IMPORT_HELP": "Impor contoh ini ke sesi Anda",
+    "FILES_SAMPLE_IMPORT_SUCCESS": "Contoh diimpor sebagai {folder} — buka Berkas & folder untuk memakainya.",
+    # ── Ready result download ──────────────────────────────────────────
     "READY_RESULT_HEADER": "📦 Hasil crawl siap",
     "READY_RESULT_SINGLE_SUBTITLE": "1 file berhasil siap diunduh",
     "READY_RESULT_ZIP_SUBTITLE": "{count} file berhasil — dikemas dalam satu zip",

@@ -229,6 +229,9 @@ _CREATE_TOAST_STATE = "_create_toast"
 _EXTEND_TOAST_STATE = "_extend_toast"
 _LOAD_TOAST_STATE = "_load_toast"
 _SWITCH_TOAST_STATE = "_switch_toast"
+# A page (app_pages/**, which must not call st.toast) sets this to a localized
+# success message; the shell fires it once on the next run.
+_PENDING_PAGE_TOAST_STATE = "pending_page_toast"
 _EXTEND_TOAST_SUCCESS = "success"
 _EXTEND_TOAST_FAILED = "failed"
 _REFRESH_FORM_STATES = {
@@ -1966,6 +1969,15 @@ if st.session_state.get("upload_done_folder"):
         active_strings["FILES_UPLOAD_SUCCESS"].format(folder=_upload_folder),
         icon=_TOAST_PAGE_SUCCESS_ICON,
     )
+if st.session_state.get("sample_import_done_folder"):
+    _sample_folder = st.session_state.pop("sample_import_done_folder")
+    st.toast(
+        active_strings["FILES_SAMPLE_IMPORT_SUCCESS"].format(folder=_sample_folder),
+        icon=_TOAST_PAGE_SUCCESS_ICON,
+    )
+_pending_page_toast = st.session_state.pop(_PENDING_PAGE_TOAST_STATE, None)
+if _pending_page_toast:
+    st.toast(_pending_page_toast, icon=_TOAST_PAGE_SUCCESS_ICON)
 
 # Register the page router on *every* run before any st.stop() so a deep-linked
 # URL (e.g. /vector-index) survives the session-bootstrap reruns below. Were

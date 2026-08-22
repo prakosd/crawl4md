@@ -7,8 +7,8 @@ vector-index (Step 2) configuration, see
 [src/vector_indexer/README.md](../src/vector_indexer/README.md). For RAG (Steps 3-5)
 configuration — `RagConfig` (`llm_model`, `temperature` 0–2 default `0.0`, `max_tokens`
 default `1024`, `top_k` default `4`) and the chat-model catalog (`CHAT_MODEL_OPTIONS`:
-Bedrock Claude / Amazon Nova / Qwen3, OpenAI GPT-4o / GPT-4o mini, and the offline echo
-model) — see [src/rag_engine/README.md](../src/rag_engine/README.md).
+Bedrock Claude / Amazon Nova / Qwen3, the OpenAI Direct API set (e.g. GPT-4o mini), and
+the offline echo model) — see [src/rag_engine/README.md](../src/rag_engine/README.md).
 
 ## Environment configuration & secrets (Streamlit app)
 
@@ -60,9 +60,11 @@ crawl/index/RAG config models.
 | `BASIC_RAG_QA_TONES` | `Neutral,Formal,Friendly,…` | Tones offered on the Step 4 Tone selector (comma-separated, in order) |
 | `BASIC_RAG_QA_DEFAULT_TONE` | `Neutral` | Tone pre-selected on the Step 4 selector |
 | `BASIC_RAG_QA_PROMPT_TEMPLATE_FILE` | `apps/streamlit/config/basic_rag_qa_prompt.txt` | Path (relative to the repo root) to the Step 4 default prompt template (a customer-service persona); edit it to reword the generated prompt without a code change. A per-session template saved from the app's **Edit template** editor takes precedence; a missing/empty file, or one missing a `{question}`/`{start}`/`{knowledge}`/`{end}`/`{tone}` field, falls back to the built-in library default. |
-| `BASIC_RAG_QA_SESSION_TOKEN_QUOTA` | `100000` | Per-session token budget shown on the Step 4 Token count panel (drives Quota and % Usage); display-only — it never blocks sending |
-| `RAG_LLM_MODELS` | `apac.amazon.nova-micro-v1:0,…,qwen.qwen3-32b-v1:0,…,gpt-4o` | Language models offered on the RAG pages (comma-separated `rag_engine` catalog ids, in order; the picker shows each model's size — small/medium — and large models are omitted here by default; the offline echo model is the silent fallback and is intentionally not listed) |
+| `BASIC_RAG_QA_SESSION_TOKEN_QUOTA` | `5700000` | Per-session token budget shown on the Step 4 Token usage panel (drives Quota and Usage). Set to ~`BASIC_RAG_QA_SESSION_COST_QUOTA` worth of tokens at the average small-model price (~$0.176/1M) so the token % and $ % roughly agree; display-only — it never blocks sending |
+| `BASIC_RAG_QA_SESSION_COST_QUOTA` | `1.0` | Per-session USD cost budget shown beside the token quota (drives the panel's `$` Usage %); display-only — it never blocks sending. Override per deploy via env or `secrets.toml` |
+| `RAG_LLM_MODELS` | `apac.amazon.nova-micro-v1:0,…,qwen.qwen3-32b-v1:0,…,gpt-4o` | **Fallback** language-model list for the RAG pages (comma-separated `rag_engine` catalog ids, in order). The picker is normally driven by `apps/streamlit/config/model_pricing.yaml` filtered to `RAG_LLM_SIZE_BANDS`; this list is used only when that config is missing/empty. The offline echo model is the silent fallback and is intentionally not listed |
 | `RAG_DEFAULT_LLM_MODEL` | `apac.amazon.nova-lite-v1:0` | Language model pre-selected on the RAG pages |
+| `RAG_LLM_SIZE_BANDS` | `XS,Small` | Size bands shown in the RAG model picker (comma-separated: XS, Small, Medium, Large, XL, Frontier); models outside these bands are hidden. Per-model metadata + pricing live in `apps/streamlit/config/model_pricing.yaml` |
 | `SEMANTIC_SEARCH_TOP_N` | `5` | Ranked matches shown on the Search page |
 | `SEMANTIC_SEARCH_DEFAULT_TAB` | `raw` | Default open tab on each result card (`raw` or `preview`) |
 | `SESSION_RETENTION_DAYS` | `7` | Days an inactive browser session's files are kept before startup cleanup deletes them (loading or crawling resets the clock) |
@@ -76,6 +78,16 @@ crawl/index/RAG config models.
 
 These are *starting defaults* for the forms; users can still override most of them
 per crawl/index in the UI. See `.env.defaults` for the inline documentation.
+
+### Model pricing & cost estimates
+
+The Step 4/5 language-model picker and the **Token usage** cost estimates read
+`apps/streamlit/config/model_pricing.yaml` — per-model display metadata (provider,
+cloud service, size band) plus USD prices per 1M input/output tokens, with the price
+capture date and sources. Edit this file to add models, change size bands, or refresh
+prices without a code change; a model with no published price simply shows `n/a` for
+cost. A new model must also exist in the `rag_engine` catalog to be callable. Costs
+shown in the app are rough estimates for guidance only.
 
 ### Secrets (kept separate)
 

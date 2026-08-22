@@ -60,10 +60,42 @@ def orrery_static_target(
     return path, f"{STATIC_URL_ROOT}/{relative}"
 
 
-def orrery_needs_refresh(target: Path, source_mtime: float) -> bool:
-    """Return True when *target* is missing or older than the source graph."""
+# Viewer/layout code that shapes the published document. When any of these change
+# (e.g. a layout tweak) an already-published orrery must rebuild on next open —
+# its crawl source mtime alone won't have moved.
+_VIEWER_CODE_FILES = (
+    "assets/viewer.js",
+    "assets/viewer.css",
+    "assets/viewer.html",
+    "viewer_assembler.py",
+    "graph_data.py",
+)
+
+
+def _viewer_code_mtime() -> float:
+    """Return the newest mtime among the viewer/layout source files (0 if none)."""
+    base = Path(__file__).resolve().parent
+    mtimes = []
+    for name in _VIEWER_CODE_FILES:
+        try:
+            mtimes.append((base / name).stat().st_mtime)
+        except OSError:
+            continue
+    return max(mtimes, default=0.0)
+
+
+def orrery_needs_refresh(
+    target: Path, source_mtime: float, code_mtime: float | None = None
+) -> bool:
+    """Return True when *target* is missing or older than the source graph or viewer code.
+
+    Publishing is skipped only when the file is newer than both the crawl's source
+    graph and the viewer/layout code, so a layout change forces every orrery to
+    rebuild on next open even though its crawl data is unchanged.
+    """
+    newest = max(source_mtime, _viewer_code_mtime() if code_mtime is None else code_mtime)
     try:
-        return target.stat().st_mtime < source_mtime
+        return target.stat().st_mtime < newest
     except OSError:
         return True
 

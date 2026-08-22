@@ -233,6 +233,8 @@ def build_folder_zip_bytes(
     return sign_zip_bytes(raw, signing_secret) if signing_secret else raw
 
 
+# Bundled sample crawl/index exports a user can import to skip Steps 1-2.
+FIXTURES_ROOT = Path(__file__).resolve().parents[4] / "data" / "fixtures"
 _IMPORT_DIR_PREFIX = "import_"
 
 
@@ -280,6 +282,29 @@ def import_target_name(session_root: Path | str, top_folder: str) -> str:
     )
 
 
+def _extract_zip_to_new_folder(session_root: Path | str, zip_bytes: bytes) -> str:
+    """Extract *zip_bytes* into a new conflict-free folder under *session_root*.
+
+    Shared by signed-upload and sample-fixture import: names the folder to avoid
+    clashing with existing ones and extracts zip-slip-safely
+    (:func:`extract_all_members`). Returns the created folder name.
+    """
+    root = Path(session_root).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    top = zip_top_folder(zip_bytes) or _IMPORT_DIR_PREFIX
+    new_name = import_target_name(root, top)
+    staging = Path(tempfile.mkdtemp(dir=root))
+    try:
+        extract_all_members(io.BytesIO(zip_bytes), staging)
+        children = [p for p in staging.iterdir() if p.is_dir()]
+        source = children[0] if len(children) == 1 else staging
+        destination = ensure_within_root(root, root / new_name)
+        shutil.move(str(source), str(destination))
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+    return new_name
+
+
 def import_signed_zip(session_root: Path | str, zip_bytes: bytes, secret: str) -> str | None:
     """Verify and extract an uploaded zip into a new conflict-free session folder.
 
@@ -289,21 +314,61 @@ def import_signed_zip(session_root: Path | str, zip_bytes: bytes, secret: str) -
     """
     if not verify_zip_bytes(zip_bytes, secret):
         return None
-    root = Path(session_root).resolve()
-    root.mkdir(parents=True, exist_ok=True)
-    top = zip_top_folder(zip_bytes) or _IMPORT_DIR_PREFIX
-    new_name = import_target_name(root, top)
-    upload = io.BytesIO(zip_bytes)
-    staging = Path(tempfile.mkdtemp(dir=root))
+    return _extract_zip_to_new_folder(session_root, zip_bytes)
+
+
+@dataclass(frozen=True)
+class SampleFixture:
+    """One bundled sample archive under ``data/fixtures/<category>/``."""
+
+    category: str
+    name: str
+    size_bytes: int
+
+
+def list_sample_fixtures() -> list[SampleFixture]:
+    """Return the bundled sample ``.zip`` fixtures, sorted by category then name.
+
+    Each fixture is a ready-made crawl or vector-index export a user can import to
+    skip Steps 1-2. Returns an empty list when the fixtures folder is absent.
+    """
+    if not FIXTURES_ROOT.is_dir():
+        return []
+    fixtures: list[SampleFixture] = []
+    for category_dir in sorted(p for p in FIXTURES_ROOT.iterdir() if p.is_dir()):
+        for archive in sorted(category_dir.glob("*.zip")):
+            try:
+                size = archive.stat().st_size
+            except OSError:
+                continue
+            fixtures.append(SampleFixture(category_dir.name, archive.name, size))
+    return fixtures
+
+
+def _sample_fixture_path(category: str, name: str) -> Path | None:
+    """Resolve a fixture ``.zip`` within :data:`FIXTURES_ROOT`, guarding traversal."""
     try:
-        extract_all_members(upload, staging)
-        children = [p for p in staging.iterdir() if p.is_dir()]
-        source = children[0] if len(children) == 1 else staging
-        destination = ensure_within_root(root, root / new_name)
-        shutil.move(str(source), str(destination))
-    finally:
-        shutil.rmtree(staging, ignore_errors=True)
-    return new_name
+        target = ensure_within_root(FIXTURES_ROOT, FIXTURES_ROOT / category / name)
+    except ValueError:
+        return None
+    return target if target.is_file() and target.suffix == ".zip" else None
+
+
+def import_sample_fixture(session_root: Path | str, category: str, name: str) -> str | None:
+    """Extract a bundled sample archive into a new conflict-free session folder.
+
+    Reads ``data/fixtures/<category>/<name>`` — a trusted repo file, so no
+    signature check — and extracts it like a normal import. Returns the created
+    folder name, or None when the fixture is missing, out of root, or unreadable.
+    """
+    source = _sample_fixture_path(category, name)
+    if source is None:
+        return None
+    try:
+        zip_bytes = source.read_bytes()
+    except OSError:
+        return None
+    return _extract_zip_to_new_folder(session_root, zip_bytes)
 
 
 def folder_zip_cache_token(session_root: Path | str, relative_path: str) -> tuple[int, float, int]:
@@ -659,20 +724,28 @@ def format_file_size(size_bytes: int) -> str:
     return f"{size_bytes / _BYTES_PER_KB:.1f} KB"
 
 
-def format_local_datetime(value: datetime, *, local_timezone: tzinfo | None = None) -> str:
+def format_local_datetime(
+    value: datetime, *, local_timezone: tzinfo | None = None, abbreviate_month: bool = False
+) -> str:
     """Format a UTC datetime as a local-time label (e.g. '1 July 2026 15:39 AEST').
 
     Reuses the same server-local formatting the download tree applies to run
-    folders, so history timestamps read consistently across the app.
+    folders, so history timestamps read consistently across the app. Set
+    ``abbreviate_month`` for a three-letter month (e.g. '1 Jul 2026 15:39 AEST').
     """
-    return _format_local_timestamp(value, local_timezone=local_timezone)
+    return _format_local_timestamp(
+        value, local_timezone=local_timezone, abbreviate_month=abbreviate_month
+    )
 
 
-def _format_local_timestamp(value: datetime, *, local_timezone: tzinfo | None = None) -> str:
+def _format_local_timestamp(
+    value: datetime, *, local_timezone: tzinfo | None = None, abbreviate_month: bool = False
+) -> str:
     target_timezone = local_timezone or datetime.now().astimezone().tzinfo or timezone.utc
     local_value = value.astimezone(timezone.utc).astimezone(target_timezone)
     zone_name = local_value.tzname() or "local"
-    month_name = calendar.month_name[local_value.month]
+    months = calendar.month_abbr if abbreviate_month else calendar.month_name
+    month_name = months[local_value.month]
     return (
         f"{local_value.day} {month_name} {local_value.year} "
         f"{local_value.hour:02d}:{local_value.minute:02d} {zone_name}"

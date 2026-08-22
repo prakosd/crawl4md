@@ -10,6 +10,7 @@ from app_support.basic_rag_qa.basic_rag_qa_form_ui import (
     TokenTotals,
     apply_maximized_prompt,
     basic_rag_qa_template_is_valid,
+    cost_usage_percent,
     resolve_basic_rag_qa_prompt_template,
     token_totals,
     tone_choices,
@@ -177,3 +178,14 @@ def test_usage_percent_zero_or_negative_quota_is_zero() -> None:
 def test_usage_percent_at_and_over_budget() -> None:
     assert usage_percent(100000, 100000) == 100
     assert usage_percent(150000, 100000) == 150
+
+
+def test_cost_usage_percent_basic_and_over_budget() -> None:
+    assert cost_usage_percent(0.5, 1.0) == pytest.approx(50.0)
+    assert cost_usage_percent(1.5, 1.0) == pytest.approx(150.0)
+
+
+def test_cost_usage_percent_none_when_unpriced_or_bad_quota() -> None:
+    assert cost_usage_percent(None, 1.0) is None
+    assert cost_usage_percent(0.5, 0.0) is None
+    assert cost_usage_percent(0.5, -1.0) is None

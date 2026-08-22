@@ -118,7 +118,7 @@ UI can render it. Message codes/builders live in `rag_engine.messages`.
 | Module | Responsibility |
 |---|---|
 | `config.py` | `RagConfig` (Pydantic v2): `llm_model`, `temperature`, `max_tokens`, `top_k`, `score_threshold`, `search_type`, `fetch_k`, `lambda_mult`, `source_filter` |
-| `catalog.py` | `ChatModelInfo`, `CHAT_MODEL_OPTIONS` (Bedrock Nova/Claude APAC profiles + Qwen3 in-Region, OpenAI, echo), `DEFAULT_CHAT_MODEL`, `ECHO_MODEL` |
+| `catalog.py` | `ChatModelInfo`, `CHAT_MODEL_OPTIONS` (Bedrock Nova/Claude APAC profiles + Qwen3/Gemma/Mistral/NVIDIA in-Region + OpenAI Direct API, echo; sorted by cloud → provider → size → name), `DEFAULT_CHAT_MODEL` (pinned to Bedrock Claude), `ECHO_MODEL` |
 | `llm/` | `resolve_chat_model` (init_chat_model + echo fallback), `thinking_disabled_model_kwargs` (best-effort per-provider), lazy echo model |
 | `retrieval.py` | reopen a persisted index via a `VectorSearcher`, run similarity or MMR search with an optional source filter, and post-filter by score threshold (Step 3) |
 | `search.py` | `VectorSearcher` interface + `ChromaSearcher` + backend-neutral `SearchHit` |

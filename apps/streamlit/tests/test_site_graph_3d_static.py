@@ -40,11 +40,21 @@ def test_orrery_static_target_sanitizes_traversal(tmp_path: Path) -> None:
 # not. Verify the freshness comparison against the source graph mtime. Type: unit.
 def test_orrery_needs_refresh_tracks_source_mtime(tmp_path: Path) -> None:
     target = tmp_path / "orrery" / "s" / "v.html"
-    assert orrery_needs_refresh(target, source_mtime=1000.0) is True  # missing
+    assert orrery_needs_refresh(target, 1000.0, code_mtime=0.0) is True  # missing
     write_orrery_html(target, "<html></html>")
     mtime = target.stat().st_mtime
-    assert orrery_needs_refresh(target, source_mtime=mtime + 5) is True  # source newer
-    assert orrery_needs_refresh(target, source_mtime=mtime - 5) is False  # already fresh
+    assert orrery_needs_refresh(target, mtime + 5, code_mtime=0.0) is True  # source newer
+    assert orrery_needs_refresh(target, mtime - 5, code_mtime=0.0) is False  # already fresh
+
+
+# Risk: a layout/viewer code change must rebuild every published orrery even when
+# the crawl data is unchanged, else users keep seeing the old layout. Type: unit.
+def test_orrery_needs_refresh_rebuilds_when_viewer_code_is_newer(tmp_path: Path) -> None:
+    target = tmp_path / "orrery" / "s" / "v.html"
+    write_orrery_html(target, "<html></html>")
+    mtime = target.stat().st_mtime
+    assert orrery_needs_refresh(target, mtime - 5, code_mtime=mtime + 5) is True  # code newer
+    assert orrery_needs_refresh(target, mtime - 5, code_mtime=mtime - 5) is False  # all older
 
 
 # Risk: publishing must create the nested session folder and write the document.

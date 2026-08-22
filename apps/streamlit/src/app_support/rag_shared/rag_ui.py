@@ -155,10 +155,11 @@ def find_index(indexes: Sequence[IndexRef], folder: str, run: str) -> IndexRef |
     )
 
 
-def local_time_label(timestamp_utc: str) -> str:
+def local_time_label(timestamp_utc: str, *, abbreviate_month: bool = False) -> str:
     """Convert a stored UTC timestamp to the app's local-time display label.
 
     Invalid values pass through unchanged; naive timestamps are treated as UTC.
+    Set ``abbreviate_month`` for a three-letter month (e.g. '1 Jul 2026 15:39').
     """
     try:
         parsed = datetime.fromisoformat(timestamp_utc)
@@ -166,7 +167,7 @@ def local_time_label(timestamp_utc: str) -> str:
         return timestamp_utc
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
-    return format_local_datetime(parsed)
+    return format_local_datetime(parsed, abbreviate_month=abbreviate_month)
 
 
 def kv_grid_html(
