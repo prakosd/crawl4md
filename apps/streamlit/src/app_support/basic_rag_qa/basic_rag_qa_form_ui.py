@@ -123,16 +123,15 @@ def token_totals(records: Sequence[BasicQaRecord]) -> TokenTotals:
     )
 
 
-def usage_percent(total: int, quota: int) -> int:
-    """Return session token usage as a whole-number percent of *quota* (floored).
+def usage_percent(total: int, quota: int) -> float:
+    """Return session token usage as a percent of *quota*, as a float.
 
-    Rounds down to whole percent for a stable, non-alarming readout and returns 0
-    when *quota* is not positive, so a misconfigured budget never divides by zero.
-    May exceed 100 when the session total is over budget.
+    Returns 0.0 when *quota* is not positive, so a misconfigured budget never
+    divides by zero. May exceed 100 when the session total is over budget.
     """
     if quota <= 0:
-        return 0
-    return total * 100 // quota
+        return 0.0
+    return total / quota * 100.0
 
 
 def cost_usage_percent(cost: float | None, quota: float) -> float | None:

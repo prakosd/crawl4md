@@ -451,6 +451,20 @@ function runForceLayout() {
 
 const forcePositions = runForceLayout();
 
+// The force layout is flat (one plane), so links all cross on that single plane.
+// Lift it into a shallow bowl — each body rises with its distance from the centre
+// — so links spread through depth and the crawl reads as a dome/flower, not a
+// tangled disc. The seed sun stays at the origin (rise 0) as the low centre.
+const DOME_LIFT = 0.2; // rim height as a fraction of the layout radius (0 = flat)
+let layoutRadius = SUN_CLEARANCE;
+for (const p of forcePositions.values()) {
+  layoutRadius = Math.max(layoutRadius, Math.hypot(p.x, p.y));
+}
+function domeLift(p) {
+  const t = layoutRadius > 0 ? Math.hypot(p.x, p.y) / layoutRadius : 0;
+  return DOME_LIFT * layoutRadius * (1 - Math.cos(t * Math.PI * 0.5));
+}
+
 function buildLayout() {
   let outer = SUN_CLEARANCE;
   for (const node of nodes) {
@@ -464,7 +478,7 @@ function buildLayout() {
 function createBody(node, isRoot) {
   const mesh = isRoot ? makeSun(node) : makePlanet(node);
   const p = forcePositions.get(node.id) || { x: 0, y: 0 };
-  mesh.position.set(p.x, 0, p.y);
+  mesh.position.set(p.x, domeLift(p), p.y);
   // An offset seed sun (multi-root crawl) lights its neighbourhood; the central
   // sun at the origin is already lit by the scene's central light.
   if (isRoot && mesh.position.length() > 1e-3) {
@@ -703,6 +717,9 @@ function buildLinks() {
 }
 buildLinks();
 
+// How high each link bows off its straight midpoint, as a fraction of the link's
+// length — a gentle upward arc so spokes read as orbits, not taut strings.
+const LINK_ARC_HEIGHT = 0.12;
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _ctrl = new THREE.Vector3();
@@ -727,9 +744,10 @@ function updateLinks() {
     planetById.get(edges[i].target).getWorldPosition(_b);
     systemGroup.worldToLocal(_a);
     systemGroup.worldToLocal(_b);
-    // Planets sit still once the force layout settles, so a link is a straight
-    // spoke: a quadratic Bézier whose control point is the midpoint traces a line.
+    // Bodies settle after the force layout, so a link is a fixed arc: start from
+    // the midpoint and lift the Bézier control point to bow each spoke gently up.
     _ctrl.addVectors(_a, _b).multiplyScalar(0.5);
+    _ctrl.y += _a.distanceTo(_b) * LINK_ARC_HEIGHT;
     let off = i * stride;
     for (let s = 0; s < SEG_PER_EDGE; s++) {
       quadPoint(_a, _ctrl, _b, s / SEG_PER_EDGE, _p);

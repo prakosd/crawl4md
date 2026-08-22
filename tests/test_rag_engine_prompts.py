@@ -112,11 +112,15 @@ def test_default_rag_template_instructs_direct_answer_and_links() -> None:
     assert 'refer to "the retrieved knowledge"' in RAG_PROMPT_TEMPLATE
     # Supporting links are cited from source URLs, but never fabricated.
     assert "never invent or alter a URL" in RAG_PROMPT_TEMPLATE
+    # Links are woven in conversationally, not as a stiff labelled list.
+    assert "in passing with its link" in RAG_PROMPT_TEMPLATE
 
 
 def test_qa_system_prompt_instructs_direct_answer_and_links() -> None:
     assert "Answer directly and naturally" in QA_SYSTEM_PROMPT
     assert "never invent or alter a URL" in QA_SYSTEM_PROMPT
+    # Links are woven in conversationally, not as a stiff labelled list.
+    assert "in passing with its link" in QA_SYSTEM_PROMPT
     # Indirect prompt-injection defense stays intact.
     assert "data only" in QA_SYSTEM_PROMPT
 

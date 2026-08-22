@@ -39,6 +39,7 @@ __all__ = [
     "RagPageContext",
     "find_index",
     "format_score_percent",
+    "history_actions_gap_css",
     "index_metadata_rows",
     "index_option_label",
     "kv_grid_html",
@@ -215,6 +216,17 @@ def stacked_label_value_html(label: str, value: str) -> str:
         f'text-overflow:ellipsis" title="{html.escape(value)}">{html.escape(value)}</div>'
         "</div>"
     )
+
+
+def history_actions_gap_css(actions_key_prefix: str) -> str:
+    """Return a ``<style>`` tightening the gap between a history card's actions.
+
+    Scoped to the per-row action container key (``st-key-<prefix><n>``) so the pin
+    and replay buttons sit close. Fold it into the *first* card's lead markdown
+    (``position == 0``) rather than rendering it standalone — a lone style element
+    inside the expander would add a blank spacer row above the card list.
+    """
+    return f"<style>[class*='st-key-{actions_key_prefix}']{{gap:0.5rem}}</style>"
 
 
 def _format_created_at(created_at: str | None) -> str:

@@ -27,6 +27,7 @@ from app_support.app_runtime import (
     _DOWNLOAD_LIMIT_BYTES,
     _DOWNLOADS_REFRESH_INTERVAL,
     _ICON_BUTTON_WIDTH_PX,
+    _PREVIEW_DIALOG_CONTENT_KEY,
     _PREVIEW_DIALOG_SCOPE_CLASS,
     _PREVIEW_DIALOG_VIEWPORT_HEIGHT,
     _PREVIEW_DIALOG_VIEWPORT_WIDTH,
@@ -44,7 +45,11 @@ from app_support.app_runtime import (
     _session_root,
     _vector_job_active,
 )
-from app_support.dialog_ui import render_confirm_dialog
+from app_support.dialog_ui import (
+    SCROLLABLE_DIALOG_CONTENT_HEIGHT_PX,
+    render_confirm_dialog,
+    scrollable_dialog_css,
+)
 from app_support.focus import click_widget
 from app_support.generated_files import (
     build_folder_zip_bytes,
@@ -111,70 +116,15 @@ def _file_preview_dialog() -> None:
         return
     file_name = Path(preview_relative_path).name
     st.markdown(
-        f"""
-        <div class="{_PREVIEW_DIALOG_SCOPE_CLASS}" style="display:none"></div>
-        <style>
-        div[data-testid="stDialog"]:has(.{_PREVIEW_DIALOG_SCOPE_CLASS}) {{
-            overflow: hidden !important;
-        }}
-        div[data-testid="stDialog"]:has(.{_PREVIEW_DIALOG_SCOPE_CLASS}) > div {{
-            align-items: center !important;
-            justify-content: center !important;
-            padding-top: 0 !important;
-        }}
-        div[data-testid="stDialog"]:has(.{_PREVIEW_DIALOG_SCOPE_CLASS}) [role="dialog"][aria-modal="true"] {{
-            width: {_PREVIEW_DIALOG_VIEWPORT_WIDTH} !important;
-            max-width: {_PREVIEW_DIALOG_VIEWPORT_WIDTH} !important;
-            height: {_PREVIEW_DIALOG_VIEWPORT_HEIGHT} !important;
-            max-height: {_PREVIEW_DIALOG_VIEWPORT_HEIGHT} !important;
-            margin: 0 !important;
-            overflow: hidden !important;
-            display: flex !important;
-            flex-direction: column !important;
-        }}
-        div[data-testid="stDialog"]:has(.{_PREVIEW_DIALOG_SCOPE_CLASS}) [role="dialog"][aria-modal="true"] > div:nth-child(2) {{
-            flex: 1 1 auto !important;
-            min-height: 0 !important;
-            overflow: hidden !important;
-            display: flex !important;
-            flex-direction: column !important;
-        }}
-        div[data-testid="stDialog"]:has(.{_PREVIEW_DIALOG_SCOPE_CLASS}) [role="dialog"][aria-modal="true"] > div:nth-child(2) [data-testid="stVerticalBlock"],
-        div[data-testid="stDialog"]:has(.{_PREVIEW_DIALOG_SCOPE_CLASS}) [role="dialog"][aria-modal="true"] > div:nth-child(2) [data-testid="stLayoutWrapper"] {{
-            flex: 1 1 auto !important;
-            min-height: 0 !important;
-            display: flex !important;
-            flex-direction: column !important;
-        }}
-        div[data-testid="stDialog"]:has(.{_PREVIEW_DIALOG_SCOPE_CLASS}) [data-testid="stElementContainer"]:has([data-testid="stCode"]) {{
-            flex: 1 1 auto !important;
-            min-height: 0 !important;
-            height: auto !important;
-            max-height: 100% !important;
-            overflow: hidden !important;
-        }}
-        div[data-testid="stDialog"]:has(.{_PREVIEW_DIALOG_SCOPE_CLASS}) [data-testid="stElementContainer"]:has([data-testid="stCode"]) [data-testid="stCode"] {{
-            height: 100% !important;
-            max-height: 100% !important;
-            overflow: auto !important;
-        }}
-        div[data-testid="stDialog"]:has(.{_PREVIEW_DIALOG_SCOPE_CLASS}) [data-testid="stElementContainer"]:has([data-testid="stCode"]) pre {{
-            height: 100% !important;
-            max-height: 100% !important;
-            overflow: auto !important;
-        }}
-        div[data-testid="stDialog"]:has(.{_PREVIEW_DIALOG_SCOPE_CLASS}) [role="dialog"][aria-modal="true"] > div:nth-child(1) {{
-            padding-top: 0.25rem !important;
-            padding-bottom: 0.25rem !important;
-        }}
-        div[data-testid="stDialog"]:has(.{_PREVIEW_DIALOG_SCOPE_CLASS}) [role="dialog"][aria-modal="true"] > div:nth-child(1) > div:first-child {{
-            display: none !important;
-        }}
-        </style>
-        """,
+        scrollable_dialog_css(
+            _PREVIEW_DIALOG_SCOPE_CLASS,
+            _PREVIEW_DIALOG_CONTENT_KEY,
+            width=_PREVIEW_DIALOG_VIEWPORT_WIDTH,
+            height=_PREVIEW_DIALOG_VIEWPORT_HEIGHT,
+        ),
         unsafe_allow_html=True,
     )
-    st.title(file_name)
+    st.subheader(file_name)
     if not file_path.exists() or not file_path.is_file():
         st.warning(strings["FILES_PREVIEW_MISSING"].format(file=preview_relative_path))
         return
@@ -226,17 +176,22 @@ def _file_preview_dialog() -> None:
         st.warning(strings["FILES_PREVIEW_READ_ERROR"].format(file=preview_relative_path))
         return
 
-    if preview.text:
-        st.code(
-            preview.text,
-            language="text",
-            line_numbers=True,
-            wrap_lines=False,
-        )
-    else:
-        st.info(strings["FILES_PREVIEW_EMPTY"].format(file=file_name))
-    if preview.truncated:
-        st.caption(strings["FILES_PREVIEW_TRUNCATED"].format(limit_kib=_PREVIEW_LIMIT_KIB))
+    with st.container(
+        height=SCROLLABLE_DIALOG_CONTENT_HEIGHT_PX,
+        border=False,
+        key=_PREVIEW_DIALOG_CONTENT_KEY,
+    ):
+        if preview.text:
+            st.code(
+                preview.text,
+                language="text",
+                line_numbers=True,
+                wrap_lines=False,
+            )
+        else:
+            st.info(strings["FILES_PREVIEW_EMPTY"].format(file=file_name))
+        if preview.truncated:
+            st.caption(strings["FILES_PREVIEW_TRUNCATED"].format(limit_kib=_PREVIEW_LIMIT_KIB))
 
 
 def _on_delete_folder_dismiss() -> None:

@@ -16,6 +16,7 @@ from app_support.rag_shared.index_catalog import IndexRef
 from app_support.rag_shared.rag_ui import (
     RagPageContext,
     find_index,
+    history_actions_gap_css,
     index_option_label,
     kv_grid_html,
     local_time_label,
@@ -50,9 +51,6 @@ _FOCUS_QUERY_KEY = "semantic_search_focus_query"
 # expand flag is a one-shot that opens the panel only right after a fresh search.
 _RESULTS_KEY = "semantic_search_results"
 _RESULTS_EXPAND_KEY = "semantic_search_results_expanded"
-
-# Tighten the gap between the pin and replay buttons in each history card.
-_HISTORY_ACTIONS_CSS = "<style>[class*='st-key-search_history_actions_']{gap:0.5rem}</style>"
 
 
 def render_page(context: RagPageContext) -> None:
@@ -234,15 +232,16 @@ def _render_search_history(
         if not records:
             st.caption(strings["SEARCH_HISTORY_EMPTY"])
             return
-        st.markdown(_HISTORY_ACTIONS_CSS, unsafe_allow_html=True)
         for position, record in enumerate(records):
             ref = find_index(indexes, record.index_folder, record.index_run)
             with st.container(border=True):
                 head, actions = st.columns([0.8, 0.2], vertical_alignment="center")
-                head.markdown(
-                    stacked_label_value_html(strings["SEARCH_HISTORY_LABEL_QUERY"], record.query),
-                    unsafe_allow_html=True,
+                lead_html = stacked_label_value_html(
+                    strings["SEARCH_HISTORY_LABEL_QUERY"], record.query
                 )
+                if position == 0:
+                    lead_html = history_actions_gap_css("search_history_actions_") + lead_html
+                head.markdown(lead_html, unsafe_allow_html=True)
                 with (
                     actions,
                     st.container(

@@ -12,6 +12,7 @@ lifting lives in ``rag_engine`` (prompt builder, streaming) and the app helpers
 from __future__ import annotations
 
 import csv
+import html
 import io
 import time
 from collections.abc import Sequence
@@ -48,6 +49,10 @@ from app_support.basic_rag_qa.basic_rag_qa_history import (
     save_basic_rag_qa_template,
     set_basic_rag_qa_pinned,
 )
+from app_support.dialog_ui import (
+    SCROLLABLE_DIALOG_CONTENT_HEIGHT_PX,
+    scrollable_dialog_css,
+)
 from app_support.focus import focus_widget
 from app_support.i18n import Strings, get_strings
 from app_support.model_pricing import (
@@ -66,6 +71,7 @@ from app_support.rag_shared.llm_form_ui import (
 from app_support.rag_shared.rag_ui import (
     RagPageContext,
     find_index,
+    history_actions_gap_css,
     index_option_label,
     kv_grid_html,
     local_time_label,
@@ -132,8 +138,23 @@ div[data-testid="stExpander"]:has(.{_TOKEN_PANEL_SCOPE_CLASS})
 </style>
 """
 
-# Tighten the gap between the pin and replay buttons in each history card.
-_HISTORY_ACTIONS_CSS = "<style>[class*='st-key-basic_rag_qa_history_actions_']{gap:0.5rem}</style>"
+# Generate prompt must own the form's Enter key. Streamlit fires the submit button
+# in the FIRST column, so Generate is placed there (Enter's target) and this reverses
+# the button row visually — Edit template ends up on the left, Generate on the right.
+# The marker's own element is hidden so it adds no vertical gap.
+_QUESTION_ACTIONS_SCOPE_CLASS = "basic-rag-qa-question-actions"
+_QUESTION_ACTIONS_CSS = f"""
+<div class="{_QUESTION_ACTIONS_SCOPE_CLASS}" style="display:none"></div>
+<style>
+div[data-testid="stElementContainer"]:has(.{_QUESTION_ACTIONS_SCOPE_CLASS}) {{
+    display: none;
+}}
+div[data-testid="stForm"]:has(.{_QUESTION_ACTIONS_SCOPE_CLASS})
+    div[data-testid="stHorizontalBlock"] {{
+    flex-direction: row-reverse;
+}}
+</style>
+"""
 
 # Widget keys; a history replay pre-fills these before the widgets render.
 _INDEX_KEY = "basic_rag_qa_index"
@@ -160,22 +181,13 @@ _FOCUS_PROMPT_KEY = "basic_rag_qa_focus_prompt"
 # reruns, and a one-shot flag set when a save is rejected for bad placeholders.
 _TEMPLATE_EDIT_KEY = "basic_rag_qa_template_edit"
 _EDIT_TEMPLATE_OPEN_KEY = "basic_rag_qa_edit_template_open"
-# The read-only model-pricing preview dialog: a wide, scrollable modal scoped via
-# a hidden marker (mirrors the maximize dialog's ``:has()`` approach).
+# The read-only model-pricing modal reuses the shared scrollable-dialog helper so
+# it sizes consistently with the file-preview modal and scrolls inside itself.
 _PRICING_DIALOG_OPEN_KEY = "basic_rag_qa_pricing_open"
 _PRICING_DIALOG_SCOPE_CLASS = "basic-rag-qa-pricing-scope"
-_PRICING_DIALOG_VIEWPORT_WIDTH = "80vw"
-_PRICING_DIALOG_MAX_HEIGHT = "82vh"
-_PRICING_DIALOG_CSS = f"""
-<div class="{_PRICING_DIALOG_SCOPE_CLASS}" style="display:none"></div>
-<style>
-div[data-testid="stDialog"]:has(.{_PRICING_DIALOG_SCOPE_CLASS}) [role="dialog"][aria-modal="true"] {{
-    width: {_PRICING_DIALOG_VIEWPORT_WIDTH} !important;
-    max-width: {_PRICING_DIALOG_VIEWPORT_WIDTH} !important;
-    max-height: {_PRICING_DIALOG_MAX_HEIGHT} !important;
-}}
-</style>
-"""
+_PRICING_DIALOG_CONTENT_KEY = "basic_rag_qa_pricing_content"
+_PRICING_DIALOG_VIEWPORT_WIDTH = "70vw"
+_PRICING_DIALOG_VIEWPORT_HEIGHT = "70vh"
 _TEMPLATE_INVALID_KEY = "basic_rag_qa_template_invalid"
 # Session-state contract with the shell: a page sets this to a localized success
 # message; the shell (app_pages must not call st.toast) fires it once next run.
@@ -255,11 +267,13 @@ def render_page(context: RagPageContext) -> None:
         _prompt_maximize_dialog(strings)
     if st.session_state.get(_EDIT_TEMPLATE_OPEN_KEY):
         _edit_template_dialog(strings, session_root)
-    if st.session_state.get(_PRICING_DIALOG_OPEN_KEY):
-        _pricing_dialog(strings)
 
     records = load_basic_rag_qa_history(session_root)
     _render_token_summary(strings, records)
+    # Checked after the panel renders so the Pricing button (inside it) opens the
+    # dialog on a single click, not the next rerun.
+    if st.session_state.get(_PRICING_DIALOG_OPEN_KEY):
+        _pricing_dialog(strings)
     _render_basic_rag_qa_history(strings, session_root, records)
 
     context.render_downloads()
@@ -312,11 +326,13 @@ def _render_panel(
 def _render_question_form(
     strings: Strings, session_root: Path, *, disabled: bool
 ) -> tuple[str, bool]:
-    """Render the question field + Generate-prompt / Edit-template buttons.
+    """Render the question field + Edit-template / Generate-prompt buttons.
 
-    Generate is defined first so Enter submits it, not Edit template. Edit template
-    is a form-submit button (so it can live in the panel, right of Generate) that
-    opens the editor via its on-click without triggering generation.
+    Enter must run Generate prompt, and Streamlit fires the submit button in the
+    *first* column. So Generate is placed in the first column (Enter's target) and
+    the button row is visually reversed with scoped ``row-reverse`` CSS — leaving
+    Edit template on the left and Generate on the right. Edit's on-click opens the
+    editor without triggering generation.
     """
     with st.form("basic_rag_qa_question_form", enter_to_submit=True, border=True):
         question = st.text_input(
@@ -325,8 +341,9 @@ def _render_question_form(
             disabled=disabled,
             key=_QUESTION_KEY,
         )
+        st.markdown(_QUESTION_ACTIONS_CSS, unsafe_allow_html=True)
         generate_col, edit_col = st.columns(2, vertical_alignment="center")
-        with generate_col:
+        with generate_col, st.container(horizontal_alignment="right"):
             generate = st.form_submit_button(
                 strings["BASIC_QA_GENERATE_BUTTON"],
                 type="primary",
@@ -334,7 +351,7 @@ def _render_question_form(
                 help=strings["BASIC_QA_GENERATE_HELP"],
                 disabled=disabled,
             )
-        with edit_col, st.container(horizontal_alignment="right"):
+        with edit_col:
             st.form_submit_button(
                 strings["BASIC_QA_EDIT_TEMPLATE_BUTTON"],
                 icon=":material/edit_note:",
@@ -694,11 +711,19 @@ def _on_pricing_dismiss() -> None:
 @st.dialog(" ", width="large", on_dismiss=_on_pricing_dismiss)
 def _pricing_dialog(strings: Strings) -> None:
     """Show the current model pricing catalog as a read-only Markdown table."""
-    st.markdown(
-        f"{_PRICING_DIALOG_CSS}\n\n**{strings['BASIC_QA_PRICING_TITLE']}**",
-        unsafe_allow_html=True,
+    css = scrollable_dialog_css(
+        _PRICING_DIALOG_SCOPE_CLASS,
+        _PRICING_DIALOG_CONTENT_KEY,
+        width=_PRICING_DIALOG_VIEWPORT_WIDTH,
+        height=_PRICING_DIALOG_VIEWPORT_HEIGHT,
     )
-    st.markdown(render_pricing_markdown())
+    st.markdown(f"{css}\n\n**{strings['BASIC_QA_PRICING_TITLE']}**", unsafe_allow_html=True)
+    with st.container(
+        height=SCROLLABLE_DIALOG_CONTENT_HEIGHT_PX,
+        border=False,
+        key=_PRICING_DIALOG_CONTENT_KEY,
+    ):
+        st.markdown(render_pricing_markdown())
 
 
 def _render_token_summary(strings: Strings, records: Sequence[BasicQaRecord]) -> None:
@@ -750,7 +775,7 @@ def _render_token_summary(strings: Strings, records: Sequence[BasicQaRecord]) ->
         )
         usage_col.metric(
             strings["BASIC_QA_SUMMARY_USAGE_LABEL"],
-            f"{percent}%",
+            f"{percent:.2f}%",
             delta=None if cost_percent is None else f"{cost_percent:.2f}%",
             delta_color="off",
             icon=":material/percent:",
@@ -808,17 +833,28 @@ def _transaction_csv(rows: list[dict[str, object]]) -> str:
 
 
 def _render_cost_disclaimer(strings: Strings) -> None:
-    """Caption below the table noting costs are estimates, citing the price sources."""
+    """Caption below the table noting costs are estimates, citing the price sources.
+
+    Rendered as a tight, muted HTML line (negative top margin) so it hugs the table
+    above instead of sitting a full block-gap below it.
+    """
     captured = pricing_captured()
     sources = pricing_sources()
     if not captured and not sources:
         return
-    links = ", ".join(f"[{source.name}]({source.url})" for source in sources)
-    st.caption(
-        strings["BASIC_QA_COST_DISCLAIMER"].format(
-            date=captured or strings["BASIC_QA_TOKEN_NA"],
-            sources=links or strings["BASIC_QA_TOKEN_NA"],
-        )
+    links = ", ".join(
+        f'<a href="{html.escape(source.url)}" target="_blank" '
+        f'rel="noopener noreferrer">{html.escape(source.name)}</a>'
+        for source in sources
+    )
+    text = strings["BASIC_QA_COST_DISCLAIMER"].format(
+        date=captured or strings["BASIC_QA_TOKEN_NA"],
+        sources=links or strings["BASIC_QA_TOKEN_NA"],
+    )
+    st.markdown(
+        f"<div style='margin-top:-0.75rem;margin-bottom:0.5rem;opacity:0.6;"
+        f"font-size:0.875rem'>{text}</div>",
+        unsafe_allow_html=True,
     )
 
 
@@ -829,13 +865,15 @@ def _render_transaction_history(strings: Strings, records: Sequence[BasicQaRecor
         if not rows:
             st.caption(strings["BASIC_QA_TXN_EMPTY"])
             return
-        with st.container(horizontal=True, horizontal_alignment="right"):
+        price_col, csv_col = st.columns(2, vertical_alignment="center")
+        with price_col:
             if st.button(
                 strings["BASIC_QA_PRICING_LABEL"],
                 icon=":material/request_quote:",
                 help=strings["BASIC_QA_PRICING_HELP"],
             ):
                 st.session_state[_PRICING_DIALOG_OPEN_KEY] = True
+        with csv_col, st.container(horizontal_alignment="right"):
             st.download_button(
                 strings["BASIC_QA_TXN_CSV_LABEL"],
                 data=_transaction_csv(rows),
@@ -936,16 +974,15 @@ def _render_basic_rag_qa_history(
         if not records:
             st.caption(strings["BASIC_QA_HISTORY_EMPTY"])
             return
-        st.markdown(_HISTORY_ACTIONS_CSS, unsafe_allow_html=True)
         for position, record in enumerate(records):
             with st.container(border=True):
                 head, actions = st.columns([0.8, 0.2], vertical_alignment="center")
-                head.markdown(
-                    stacked_label_value_html(
-                        strings["BASIC_QA_HISTORY_LABEL_QUESTION"], record.question or "—"
-                    ),
-                    unsafe_allow_html=True,
+                lead_html = stacked_label_value_html(
+                    strings["BASIC_QA_HISTORY_LABEL_QUESTION"], record.question or "—"
                 )
+                if position == 0:
+                    lead_html = history_actions_gap_css("basic_rag_qa_history_actions_") + lead_html
+                head.markdown(lead_html, unsafe_allow_html=True)
                 with (
                     actions,
                     st.container(

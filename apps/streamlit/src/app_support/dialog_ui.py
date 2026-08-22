@@ -11,7 +11,50 @@ from collections.abc import Callable
 
 import streamlit as st
 
-__all__ = ["confirm_dialog_css", "render_confirm_dialog"]
+__all__ = [
+    "SCROLLABLE_DIALOG_CONTENT_HEIGHT_PX",
+    "confirm_dialog_css",
+    "render_confirm_dialog",
+    "scrollable_dialog_css",
+]
+
+# Fixed pixel height for a scrollable dialog's content container. It is the
+# fallback size and the scroll anchor; `scrollable_dialog_css` then stretches it
+# to a viewport-relative height on top. Content taller than this scrolls inside
+# the modal instead of spilling onto the main page.
+SCROLLABLE_DIALOG_CONTENT_HEIGHT_PX = 600
+
+
+def scrollable_dialog_css(
+    scope_class: str,
+    content_key: str,
+    *,
+    width: str = "70vw",
+    height: str = "70vh",
+) -> str:
+    """Return the marker + ``<style>`` that size a scrollable ``@st.dialog``.
+
+    Widens the modal to *width* and stretches the keyed content container to
+    *height* of the viewport, keeping the scrollbar inside that container. Pair it
+    with an ``st.container(height=SCROLLABLE_DIALOG_CONTENT_HEIGHT_PX, key=
+    content_key)`` holding the scrollable body. Selectors stay shallow (the dialog
+    role plus the stable ``st-key-`` class) so the sizing survives Streamlit DOM
+    changes — the deep ``nth-child`` chains this replaces silently broke on upgrade.
+    """
+    return f"""
+        <div class="{scope_class}" style="display:none"></div>
+        <style>
+        div[data-testid="stDialog"]:has(.{scope_class}) div[role="dialog"] {{
+            width: {width} !important;
+            max-width: {width} !important;
+            max-height: 90vh !important;
+        }}
+        div[data-testid="stDialog"]:has(.{scope_class}) [class*="st-key-{content_key}"] {{
+            height: {height} !important;
+            max-height: {height} !important;
+        }}
+        </style>
+    """
 
 
 def confirm_dialog_css(cancel_key: str, confirm_key: str) -> str:

@@ -50,6 +50,9 @@ _PREVIEW_DIALOG_VIEWPORT_PERCENT = 70
 _PREVIEW_DIALOG_VIEWPORT_WIDTH = f"{_PREVIEW_DIALOG_VIEWPORT_PERCENT}vw"
 _PREVIEW_DIALOG_VIEWPORT_HEIGHT = f"{_PREVIEW_DIALOG_VIEWPORT_PERCENT}vh"
 _PREVIEW_DIALOG_SCOPE_CLASS = "crawl4md-preview-dialog-scope"
+# Streamlit key on the preview modal's scrollable content container; the shared
+# `scrollable_dialog_css` hook targets it to give the modal its own scrollbar.
+_PREVIEW_DIALOG_CONTENT_KEY = "preview_dialog_content"
 _PREVIEW_LIMIT_BYTES = get_settings().ui_preview_limit_kb * 1024
 _PREVIEW_LIMIT_KIB = _PREVIEW_LIMIT_BYTES // 1024
 _UTC_DISPLAY_FORMAT = "%Y-%m-%d %H:%M:%S UTC"

@@ -39,6 +39,8 @@ def test_shipped_prompt_template_uses_customer_service_persona() -> None:
     for field in ("{question}", "{start}", "{knowledge}", "{end}", "{tone}"):
         assert field in template
     assert "ONLY the retrieved knowledge" in template
+    # Source links are woven in conversationally, not as a stiff labelled list.
+    assert "in passing with its link" in template
 
 
 def test_resolve_prompt_template_returns_file_contents(
@@ -165,19 +167,19 @@ def test_token_totals_empty() -> None:
     assert token_totals([]) == TokenTotals(0, 0, 0)
 
 
-def test_usage_percent_floors_to_whole_percent() -> None:
-    assert usage_percent(1234, 100000) == 1  # 1.234% floored
-    assert usage_percent(4999, 100000) == 4  # 4.999% floored
+def test_usage_percent_keeps_two_decimal_precision() -> None:
+    assert usage_percent(1234, 100000) == pytest.approx(1.234)
+    assert usage_percent(4999, 100000) == pytest.approx(4.999)
 
 
 def test_usage_percent_zero_or_negative_quota_is_zero() -> None:
-    assert usage_percent(500, 0) == 0
-    assert usage_percent(500, -10) == 0
+    assert usage_percent(500, 0) == 0.0
+    assert usage_percent(500, -10) == 0.0
 
 
 def test_usage_percent_at_and_over_budget() -> None:
-    assert usage_percent(100000, 100000) == 100
-    assert usage_percent(150000, 100000) == 150
+    assert usage_percent(100000, 100000) == pytest.approx(100.0)
+    assert usage_percent(150000, 100000) == pytest.approx(150.0)
 
 
 def test_cost_usage_percent_basic_and_over_budget() -> None:

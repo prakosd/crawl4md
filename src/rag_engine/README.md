@@ -92,8 +92,9 @@ can be tested without ChromaDB or network access.
 Retrieved context is wrapped in `<context>` delimiters and the model is told to
 treat it as data only and never follow instructions embedded inside it (see
 `prompts.py`). The prompts also tell the model to answer directly and naturally —
-no "the retrieved knowledge…" / "the context…" meta-phrasing — and to cite a
-source's URL (inline or as a short "Sources" list) only when it genuinely
+no "the retrieved knowledge…" / "the context…" meta-phrasing — and to weave a
+source's URL into the reply the way a helpful person would (mentioning it in
+passing, not as a stiff labelled "Sources" list) only when it genuinely
 supports the answer, never invented; `format_context` / `format_knowledge`
 surface each chunk's `source_url` from its metadata so a link is available to
 cite. `build_rag_prompt` (Step 4) assembles a complete, human-readable

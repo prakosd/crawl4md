@@ -12,6 +12,7 @@ from app_support.rag_shared.index_catalog import IndexRef
 from app_support.rag_shared.rag_ui import (
     find_index,
     format_score_percent,
+    history_actions_gap_css,
     index_metadata_rows,
     kv_grid_html,
     local_time_label,
@@ -89,6 +90,14 @@ def test_stacked_label_value_html_escapes_and_clips() -> None:
     assert "a &amp; &lt;b&gt;" in block  # value is html-escaped
     assert 'title="a &amp; &lt;b&gt;"' in block  # full text kept for hover
     assert "text-overflow:ellipsis" in block  # clipped to a single line
+
+
+def test_history_actions_gap_css_scopes_to_key_prefix() -> None:
+    css = history_actions_gap_css("search_history_actions_")
+
+    assert "st-key-search_history_actions_" in css
+    assert "gap:0.5rem" in css
+    assert css.startswith("<style>") and css.endswith("</style>")
 
 
 def _chunk(score: float) -> RetrievedChunk:
