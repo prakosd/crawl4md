@@ -10,6 +10,7 @@ from app_support.generated_files import format_local_datetime
 from app_support.i18n import STRINGS_EN
 from app_support.rag_shared.index_catalog import IndexRef
 from app_support.rag_shared.rag_ui import (
+    chunks_from_stored,
     find_index,
     format_score_percent,
     history_actions_gap_css,
@@ -21,6 +22,7 @@ from app_support.rag_shared.rag_ui import (
     sort_results_by_score,
     stacked_label_value_html,
 )
+from app_support.rag_shared.result_snapshot import stored_results
 
 
 def _index_ref(folder: str, run: str) -> IndexRef:
@@ -170,3 +172,18 @@ def test_index_metadata_rows_include_key_manifest_fields() -> None:
     assert rows[STRINGS_EN["SEARCH_META_COLLECTION"]] == "crawl4md_documents"
     expected_created = format_local_datetime(datetime(2026, 6, 22, 10, 30, tzinfo=timezone.utc))
     assert rows[STRINGS_EN["SEARCH_META_CREATED"]] == expected_created
+
+
+def test_chunks_from_stored_round_trips_retrieved_chunks() -> None:
+    stored = stored_results(
+        [RetrievedChunk(text="hi", source="a.md", score=0.9, metadata={"chunk_index": "2"})]
+    )
+
+    chunks = chunks_from_stored(stored)
+
+    assert len(chunks) == 1
+    assert isinstance(chunks[0], RetrievedChunk)
+    assert chunks[0].text == "hi"
+    assert chunks[0].source == "a.md"
+    assert chunks[0].score == 0.9
+    assert chunks[0].metadata == {"chunk_index": "2"}

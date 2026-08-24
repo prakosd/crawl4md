@@ -70,6 +70,7 @@ from app_support.rag_shared.llm_form_ui import (
 )
 from app_support.rag_shared.rag_ui import (
     RagPageContext,
+    chunks_from_stored,
     find_index,
     history_actions_gap_css,
     index_option_label,
@@ -80,6 +81,7 @@ from app_support.rag_shared.rag_ui import (
     select_index,
     stacked_label_value_html,
 )
+from app_support.rag_shared.result_snapshot import StoredResult, stored_results
 from app_support.settings import get_settings
 
 if TYPE_CHECKING:
@@ -166,6 +168,10 @@ _PROMPT_KEY = "basic_rag_qa_prompt"
 # The last Generate-prompt search hits persist so the Search results panel
 # survives reruns and stays a stable fixture between the question and prompt.
 _QA_RESULTS_KEY = "basic_rag_qa_results"
+# The retrieval time and the question behind the stored hits: the first feeds the
+# recorded search/answer/total breakdown, the second leads the results panel.
+_QA_SEARCH_SECONDS_KEY = "basic_rag_qa_search_seconds"
+_QA_QUESTION_KEY = "basic_rag_qa_results_question"
 # The maximized-editor mirror of the prompt, a pending write-back applied before
 # the inline widget renders, and the flag that keeps the dialog open across reruns.
 _PROMPT_MAX_KEY = "basic_rag_qa_prompt_max"
@@ -543,9 +549,12 @@ def _render_search_results(
     """
     if do_generate and index is not None:
         with st.spinner(strings["BASIC_QA_SEARCHING"]):
+            start = time.perf_counter()
             result = retrieve(index.run_dir, question, RagConfig(top_k=top_results))
+            st.session_state[_QA_SEARCH_SECONDS_KEY] = time.perf_counter() - start
         render_messages(strings, result.warnings, result.errors)
         st.session_state[_QA_RESULTS_KEY] = list(result.chunks)
+        st.session_state[_QA_QUESTION_KEY] = question
         st.session_state[_PROMPT_KEY] = build_rag_prompt(
             question,
             result.chunks,
@@ -562,7 +571,12 @@ def _render_search_results(
         else strings["BASIC_QA_RESULTS_EMPTY"]
     )
     render_results_panel(
-        strings, stored or [], empty_hint=empty_hint, default_tab=_DEFAULT_RESULT_TAB
+        strings,
+        stored or [],
+        empty_hint=empty_hint,
+        default_tab=_DEFAULT_RESULT_TAB,
+        question=st.session_state.get(_QA_QUESTION_KEY),
+        question_label=strings["BASIC_QA_HISTORY_LABEL_QUESTION"],
     )
 
 
@@ -605,6 +619,8 @@ def _send_prompt(
         answer=generation.text,
         usage=generation.usage,
         elapsed=elapsed,
+        search_seconds=float(st.session_state.get(_QA_SEARCH_SECONDS_KEY, 0.0)),
+        results=stored_results(st.session_state.get(_QA_RESULTS_KEY) or []),
     )
     st.session_state[_ANSWER_KEY] = generation.text
     st.session_state[_STATS_KEY] = caption
@@ -623,6 +639,8 @@ def _record_send(
     answer: str,
     usage: TokenUsage | None,
     elapsed: float,
+    search_seconds: float,
+    results: tuple[StoredResult, ...],
 ) -> None:
     append_basic_rag_qa_record(
         session_root,
@@ -640,7 +658,9 @@ def _record_send(
             input_tokens=usage.input_tokens if usage else None,
             output_tokens=usage.output_tokens if usage else None,
             total_tokens=usage.total_tokens if usage else None,
+            search_seconds=search_seconds,
             latency_seconds=elapsed,
+            results=results,
         ),
     )
 
@@ -928,6 +948,11 @@ def _apply_replay(strings: Strings, indexes: Sequence[IndexRef], replay: dict) -
     ref = find_index(indexes, str(replay.get("index_folder", "")), str(replay.get("index_run", "")))
     if ref is not None:
         st.session_state[_INDEX_KEY] = index_option_label(strings, ref)
+    # A replay loads a past prompt but runs no new search; drop the previous
+    # generate's hits + timing so a Send-without-Generate records neither.
+    st.session_state.pop(_QA_RESULTS_KEY, None)
+    st.session_state.pop(_QA_SEARCH_SECONDS_KEY, None)
+    st.session_state.pop(_QA_QUESTION_KEY, None)
     st.session_state[_ANSWER_KEY] = None
     st.session_state[_STATS_KEY] = None
     st.session_state[_FOCUS_PROMPT_KEY] = True
@@ -952,12 +977,19 @@ def _history_grid(strings: Strings, record: BasicQaRecord) -> str:
         (strings["BASIC_QA_HISTORY_META_TONE"], record.tone or "—"),
         (strings["BASIC_QA_HISTORY_META_TOP"], str(record.top_k)),
         (strings["BASIC_QA_HISTORY_META_TOKENS"], _tokens_value(strings, record)),
-        (
-            strings["BASIC_QA_HISTORY_META_TIME"],
-            strings["BASIC_QA_HISTORY_SECONDS"].format(seconds=f"{record.latency_seconds:.1f}"),
-        ),
+        (strings["BASIC_QA_HISTORY_META_TIME"], _time_breakdown(strings, record)),
     ]
     return kv_grid_html(rows, columns=4, margin_bottom=True)
+
+
+def _time_breakdown(strings: Strings, record: BasicQaRecord) -> str:
+    """Format Response time as ``search / answer / total`` seconds (compute-only)."""
+    total = record.search_seconds + record.latency_seconds
+    return strings["BASIC_QA_HISTORY_TIME_BREAKDOWN"].format(
+        search=f"{record.search_seconds:.1f}",
+        answer=f"{record.latency_seconds:.1f}",
+        total=f"{total:.1f}",
+    )
 
 
 def _render_basic_rag_qa_history(
@@ -1016,6 +1048,12 @@ def _render_basic_rag_qa_history(
                         st.rerun()
                 with st.expander(strings["BASIC_QA_HISTORY_DETAILS_EXPANDER"], expanded=False):
                     st.markdown(_history_grid(strings, record), unsafe_allow_html=True)
+                render_results_panel(
+                    strings,
+                    chunks_from_stored(record.results),
+                    empty_hint=strings["SEARCH_NO_RESULTS"],
+                    default_tab=_DEFAULT_RESULT_TAB,
+                )
                 with st.expander(strings["BASIC_QA_HISTORY_PROMPT_EXPANDER"], expanded=False):
                     st.code(record.prompt or "—", language="markdown", wrap_lines=True)
                 with st.expander(strings["BASIC_QA_HISTORY_ANSWER_EXPANDER"], expanded=False):

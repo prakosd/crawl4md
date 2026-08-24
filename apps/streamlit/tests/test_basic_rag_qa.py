@@ -99,6 +99,14 @@ def test_history_grid_includes_model_tone_and_tokens(monkeypatch: MonkeyPatch) -
     assert STRINGS_EN["BASIC_QA_HISTORY_LABEL_TIME"] in grid
 
 
+def test_history_grid_shows_time_breakdown(monkeypatch: MonkeyPatch) -> None:
+    page = _page(monkeypatch)
+
+    grid = page._history_grid(STRINGS_EN, _record(search_seconds=0.4, latency_seconds=1.2))
+
+    assert "0.4s + 1.2s = 1.6s" in grid  # search + answer = total
+
+
 def test_apply_replay_repopulates_question_and_prompt(monkeypatch: MonkeyPatch) -> None:
     page = _page(monkeypatch)
     state: dict[str, object] = {}

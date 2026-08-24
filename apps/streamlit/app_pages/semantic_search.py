@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Sequence
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -15,6 +16,7 @@ from app_support.i18n import Strings, get_strings
 from app_support.rag_shared.index_catalog import IndexRef
 from app_support.rag_shared.rag_ui import (
     RagPageContext,
+    chunks_from_stored,
     find_index,
     history_actions_gap_css,
     index_option_label,
@@ -26,6 +28,7 @@ from app_support.rag_shared.rag_ui import (
     select_index,
     stacked_label_value_html,
 )
+from app_support.rag_shared.result_snapshot import stored_results
 from app_support.semantic_search.search_history import (
     SearchRecord,
     append_search_record,
@@ -51,6 +54,8 @@ _FOCUS_QUERY_KEY = "semantic_search_focus_query"
 # expand flag is a one-shot that opens the panel only right after a fresh search.
 _RESULTS_KEY = "semantic_search_results"
 _RESULTS_EXPAND_KEY = "semantic_search_results_expanded"
+# The query behind the persisted hits, shown as the results panel's lead line.
+_RESULTS_QUERY_KEY = "semantic_search_results_query"
 
 
 def render_page(context: RagPageContext) -> None:
@@ -131,7 +136,9 @@ def render_page(context: RagPageContext) -> None:
     if request is not None:
         ref, query_text, config = request
         with st.spinner(strings["SEARCH_SEARCHING"]):
+            start = time.perf_counter()
             result = retrieve(ref.run_dir, query_text, config)
+            search_seconds = time.perf_counter() - start
         render_messages(strings, result.warnings, result.errors)
         scores = [chunk.score for chunk in result.chunks]
         append_search_record(
@@ -145,12 +152,15 @@ def render_page(context: RagPageContext) -> None:
                 top_k=config.top_k,
                 result_count=len(result.chunks),
                 top_score=max(scores) if scores else None,
+                search_seconds=search_seconds,
+                results=stored_results(result.chunks),
             ),
         )
         # Persist the hits so the results panel survives later reruns; only a
         # fresh search opens it — it stays collapsed on reload and other reruns.
         st.session_state[_RESULTS_KEY] = list(result.chunks)
         st.session_state[_RESULTS_EXPAND_KEY] = True
+        st.session_state[_RESULTS_QUERY_KEY] = query_text
 
     # The results panel is always rendered so its gap to the history panel stays
     # constant. Before the first search it invites one; a search that returned
@@ -167,6 +177,8 @@ def render_page(context: RagPageContext) -> None:
         empty_hint=empty_hint,
         default_tab=_DEFAULT_RESULT_TAB,
         expanded=st.session_state.pop(_RESULTS_EXPAND_KEY, False),
+        question=st.session_state.get(_RESULTS_QUERY_KEY),
+        question_label=strings["SEARCH_HISTORY_LABEL_QUERY"],
     )
 
     _render_search_history(strings, session_root, indexes)
@@ -274,6 +286,12 @@ def _render_search_history(
                         st.rerun()
                 with st.expander(strings["SEARCH_HISTORY_LABEL_DETAILS"], expanded=False):
                     st.markdown(_search_history_grid(strings, record, ref), unsafe_allow_html=True)
+                render_results_panel(
+                    strings,
+                    chunks_from_stored(record.results),
+                    empty_hint=strings["SEARCH_NO_RESULTS"],
+                    default_tab=_DEFAULT_RESULT_TAB,
+                )
 
 
 def _search_history_grid(strings: Strings, record: SearchRecord, ref: IndexRef | None) -> str:
@@ -285,11 +303,16 @@ def _search_history_grid(strings: Strings, record: SearchRecord, ref: IndexRef |
     rows = [
         (strings["SEARCH_HISTORY_LABEL_TIME"], local_time_label(record.timestamp_utc)),
         (
-            strings["SEARCH_HISTORY_LABEL_RESULTS"],
-            strings["SEARCH_HISTORY_RESULT_COUNT"].format(n=record.result_count),
+            strings["SEARCH_HISTORY_LABEL_RESULTS_TIME"],
+            f"{record.result_count} / {_format_search_seconds(record.search_seconds)}",
         ),
         (strings["SEARCH_HISTORY_LABEL_INDEX_NAME"], record.index_folder),
         (strings["SEARCH_HISTORY_LABEL_INDEX_DATE"], record.index_run),
         *_index_detail_rows(strings, record, ref),
     ]
     return kv_grid_html(rows, columns=4, margin_bottom=True)
+
+
+def _format_search_seconds(seconds: float | None) -> str:
+    """Render the elapsed search time as ``0.3s`` (— for older records without it)."""
+    return "—" if seconds is None else f"{seconds:.1f}s"

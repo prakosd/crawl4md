@@ -22,6 +22,7 @@ from vector_indexer import IndexManifest
 from app_support.generated_files import format_local_datetime
 from app_support.i18n import Strings, localize_message
 from app_support.rag_shared.index_catalog import IndexRef
+from app_support.rag_shared.result_snapshot import StoredResult
 
 # Result-card tab identifiers. Streamlit always activates the first tab, so the
 # configured default tab is rendered first to make it the initial selection.
@@ -37,6 +38,7 @@ _RESULT_CARD_CSS = (
 
 __all__ = [
     "RagPageContext",
+    "chunks_from_stored",
     "find_index",
     "format_score_percent",
     "history_actions_gap_css",
@@ -122,6 +124,19 @@ def sort_results_by_score(chunks: Sequence[RetrievedChunk]) -> list[RetrievedChu
     return sorted(chunks, key=lambda chunk: chunk.score, reverse=True)
 
 
+def chunks_from_stored(stored: Sequence[StoredResult]) -> list[RetrievedChunk]:
+    """Rebuild renderable ``RetrievedChunk`` objects from stored history snapshots."""
+    return [
+        RetrievedChunk(
+            text=item.text,
+            source=item.source,
+            score=item.score,
+            metadata=dict(item.metadata),
+        )
+        for item in stored
+    ]
+
+
 def index_metadata_rows(strings: Strings, manifest: IndexManifest) -> list[tuple[str, str]]:
     """Return ordered (label, value) pairs describing an index for compact display."""
     return [
@@ -201,16 +216,18 @@ def kv_grid_html(
     )
 
 
-def stacked_label_value_html(label: str, value: str) -> str:
+def stacked_label_value_html(label: str, value: str, *, margin_bottom: bool = False) -> str:
     """Build a dim-gray label stacked tightly above a single-line value.
 
     Matches the kv-grid label style (dim, 0.875rem) and clips the value to one
     line with an ellipsis (full text on hover), so the Search history card's
-    question label + value stay within the replay button's height.
+    question label + value stay within the replay button's height. Set
+    *margin_bottom* to add breathing room below (e.g. above a results panel's cards).
     """
+    bottom = ";margin-bottom:0.5rem" if margin_bottom else ""
     return (
         '<div style="display:flex;flex-direction:column;line-height:1.25;overflow:hidden;'
-        'margin-top:-0.35rem">'
+        f'margin-top:-0.35rem{bottom}">'
         f'<div style="opacity:0.65;font-size:0.875rem">{html.escape(label)}</div>'
         '<div style="font-weight:600;white-space:nowrap;overflow:hidden;'
         f'text-overflow:ellipsis" title="{html.escape(value)}">{html.escape(value)}</div>'
@@ -328,13 +345,16 @@ def render_results_panel(
     empty_hint: str,
     default_tab: str = _RESULT_TAB_RAW,
     expanded: bool = False,
+    question: str | None = None,
+    question_label: str | None = None,
 ) -> None:
     """Render search hits as ranked cards inside an always-present collapsible panel.
 
     The panel is a stable fixture: it renders even with no hits (showing *empty_hint*
     instead of cards) so the gap to the block below never shifts. When there are hits
     the title carries the match count; callers pass ``expanded=True`` right after a
-    search so fresh results open at once.
+    search so fresh results open at once. Passing *question* + *question_label* leads
+    the cards with the query that produced them (same stacked look as a history card).
     """
     ranked = sort_results_by_score(chunks)
     if not ranked:
@@ -343,6 +363,11 @@ def render_results_panel(
         return
     label = strings["SEARCH_RESULTS_EXPANDER"].format(count=len(ranked))
     with st.expander(label, expanded=expanded):
+        if question and question_label:
+            st.markdown(
+                stacked_label_value_html(question_label, question, margin_bottom=True),
+                unsafe_allow_html=True,
+            )
         render_result_cards(strings, ranked, default_tab=default_tab)
 
 

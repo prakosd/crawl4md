@@ -13,6 +13,7 @@ from app_support.basic_rag_qa.basic_rag_qa_history import (
     save_basic_rag_qa_template,
     set_basic_rag_qa_pinned,
 )
+from app_support.rag_shared.result_snapshot import StoredResult
 
 
 def _record(**overrides: object) -> BasicQaRecord:
@@ -64,6 +65,19 @@ def test_answer_round_trips(tmp_path: Path) -> None:
     record = load_basic_rag_qa_history(tmp_path)[0]
 
     assert record.answer == "Because it is grounded."
+
+
+def test_search_time_and_results_round_trip(tmp_path: Path) -> None:
+    results = (
+        StoredResult(source="a.md", score=0.88, text="alpha", metadata={"chunk_index": "0"}),
+    )
+    append_basic_rag_qa_record(tmp_path, _record(search_seconds=0.42, results=results))
+
+    record = load_basic_rag_qa_history(tmp_path)[0]
+
+    assert record.search_seconds == 0.42
+    assert record.results == results
+    assert record.results[0].text == "alpha"
 
 
 def test_pinned_records_sort_first(tmp_path: Path) -> None:

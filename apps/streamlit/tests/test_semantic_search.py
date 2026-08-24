@@ -84,8 +84,17 @@ def test_search_history_grid_includes_query_facts(monkeypatch: MonkeyPatch) -> N
     assert STRINGS_EN["SEARCH_META_MODEL"] in grid
     assert "vector_01_weather" in grid
     assert "2026-07-01_09-00-00" in grid
-    assert "4 results" in grid
+    assert STRINGS_EN["SEARCH_HISTORY_LABEL_RESULTS_TIME"] in grid
+    assert "4 / " in grid  # result count paired with the search time
     assert "titan" in grid
+
+
+def test_search_history_grid_shows_search_time(monkeypatch: MonkeyPatch) -> None:
+    page = _page(monkeypatch)
+
+    grid = page._search_history_grid(STRINGS_EN, _record(search_seconds=0.34), None)
+
+    assert "4 / 0.3s" in grid
 
 
 def test_index_detail_rows_fall_back_when_index_gone(monkeypatch: MonkeyPatch) -> None:

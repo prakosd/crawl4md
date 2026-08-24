@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
+from app_support.rag_shared.result_snapshot import StoredResult
 from app_support.semantic_search.search_history import (
     SEARCH_HISTORY_DIRNAME,
     SearchRecord,
@@ -58,6 +59,22 @@ def test_record_round_trips_all_fields(tmp_path: Path) -> None:
     assert loaded.top_score == 0.8123
 
 
+def test_record_round_trips_search_time_and_results(tmp_path: Path) -> None:
+    results = (
+        StoredResult(source="a.md", score=0.91, text="hello", metadata={"chunk_index": "0"}),
+        StoredResult(source="b.md", score=0.42, text="world", metadata={"language": "english"}),
+    )
+    original = _record("felix", search_seconds=0.73, results=results)
+    append_search_record(tmp_path, original)
+
+    (loaded,) = load_search_history(tmp_path)
+
+    assert loaded == original
+    assert loaded.search_seconds == 0.73
+    assert loaded.results == results
+    assert loaded.results[0].metadata == {"chunk_index": "0"}
+
+
 def test_history_is_capped_to_recent_records(tmp_path: Path) -> None:
     for index in range(230):
         append_search_record(tmp_path, _record(f"q{index}"))
@@ -83,7 +100,7 @@ def test_malformed_lines_are_skipped(tmp_path: Path) -> None:
 
 
 def test_csv_companion_has_header_and_rows(tmp_path: Path) -> None:
-    append_search_record(tmp_path, _record("alpha"))
+    append_search_record(tmp_path, _record("alpha", search_seconds=0.5))
     append_search_record(tmp_path, _record("beta", top_score=None))
 
     csv_path = search_history_dir(tmp_path) / "search_history.csv"
@@ -92,6 +109,8 @@ def test_csv_companion_has_header_and_rows(tmp_path: Path) -> None:
     assert [row["query"] for row in rows] == ["alpha", "beta"]
     assert rows[0]["top_score"] == "0.8123"
     assert rows[1]["top_score"] == ""
+    assert rows[0]["search_seconds"] == "0.50"
+    assert rows[1]["search_seconds"] == ""
 
 
 def test_pinned_records_sort_first(tmp_path: Path) -> None:

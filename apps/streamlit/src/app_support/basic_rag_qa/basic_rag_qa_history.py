@@ -16,6 +16,8 @@ from pathlib import Path
 
 from artifact_store.naming import BASIC_RAG_QA_FOLDER_PREFIX
 
+from app_support.rag_shared.result_snapshot import StoredResult, stored_results_from_payload
+
 __all__ = [
     "BASIC_QA_HISTORY_DIRNAME",
     "BasicQaRecord",
@@ -52,6 +54,7 @@ _CSV_COLUMNS = (
     "input_tokens",
     "output_tokens",
     "total_tokens",
+    "search_seconds",
     "latency_seconds",
     "pinned",
 )
@@ -74,7 +77,9 @@ class BasicQaRecord:
     input_tokens: int | None = None
     output_tokens: int | None = None
     total_tokens: int | None = None
+    search_seconds: float = 0.0
     latency_seconds: float = 0.0
+    results: tuple[StoredResult, ...] = ()
     pinned: bool = False
 
 
@@ -192,6 +197,7 @@ def _write_csv(path: Path, records: list[BasicQaRecord]) -> None:
                     "" if record.input_tokens is None else record.input_tokens,
                     "" if record.output_tokens is None else record.output_tokens,
                     "" if record.total_tokens is None else record.total_tokens,
+                    f"{record.search_seconds:.2f}",
                     f"{record.latency_seconds:.2f}",
                     record.pinned,
                 ]
@@ -220,7 +226,9 @@ def _record_from_payload(payload: object) -> BasicQaRecord | None:
             input_tokens=_optional_int(payload.get("input_tokens")),
             output_tokens=_optional_int(payload.get("output_tokens")),
             total_tokens=_optional_int(payload.get("total_tokens")),
+            search_seconds=float(payload.get("search_seconds", 0.0)),
             latency_seconds=float(payload.get("latency_seconds", 0.0)),
+            results=stored_results_from_payload(payload.get("results")),
             pinned=bool(payload.get("pinned", False)),
         )
     except (KeyError, TypeError, ValueError):

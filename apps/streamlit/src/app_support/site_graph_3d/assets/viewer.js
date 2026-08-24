@@ -203,7 +203,6 @@ let focusChain = null; // Set<edgeIndex> from the focused planet up to the root
 let focusOrder = null; // Map<edgeIndex, position> root(0)->planet for the flow
 let focusLen = 0;
 let hoverChain = null; // Set<edgeIndex> highlighted while hovering
-let linksDirty = false; // repaint link colours once when hover/focus changes
 
 function markInteract() {
   lastInteract = performance.now();
@@ -218,7 +217,6 @@ function setFocus(mesh) {
   focusOrder = null;
   focusLen = 0;
   followFocus = false;
-  linksDirty = true;
   focusMesh = mesh || null;
   if (!focusMesh) return;
   followFocus = true;
@@ -490,7 +488,8 @@ function createBody(node, isRoot) {
   planets.push({ node, mesh, selfSpeed: 0.12 + (hashString(node.id) % 100) / 320 });
 }
 
-// Soft radial-gradient glow reused by the sun's corona and red-dwarf halos.
+// Soft radial-gradient glow reused by the sun's corona, the focus halo, and
+// black-hole halos.
 function makeGlowTexture() {
   const size = 256;
   const cv = document.createElement("canvas");
@@ -510,6 +509,7 @@ function makeGlowTexture() {
 }
 const GLOW_TEXTURE = makeGlowTexture();
 const coronas = []; // { sprite, baseR } — updated by zoom in animate()
+const accretionDisks = []; // { disk, speed } — black-hole discs spun in animate()
 
 function makeSun(node) {
   const r = SUN_R + clamp01(Number(node.size_scale) || 0) * 1.6;
@@ -542,7 +542,7 @@ function makeSun(node) {
 }
 
 function makePlanet(node) {
-  if (node.color_category === "fail") return makeRedDwarf(node);
+  if (node.color_category === "fail") return makeBlackHole(node);
   const r = planetRadius(node);
   const isGiant = Boolean(node.is_giant);
   const bucket = Math.max(0, Math.min(3, Math.floor((Number(node.richness) || 0) * 4)));
@@ -579,31 +579,31 @@ function makePlanet(node) {
   return mesh;
 }
 
-// Failed pages become dim red-dwarf stars: small, cool, faintly glowing embers.
-function makeRedDwarf(node) {
+// Failed pages collapse into black holes: a pure-black event horizon ringed by a
+// tilted, glowing accretion disc (spun in animate()) plus a faint gravitational
+// halo so the dark core still reads against the starfield.
+function makeBlackHole(node) {
   const r = MIN_PLANET_R + clamp01(Number(node.size_scale) || 0) * 0.9;
-  const mesh = new THREE.Mesh(
-    new THREE.SphereGeometry(r, 24, 24),
-    new THREE.MeshStandardMaterial({
-      color: 0x3a0f08,
-      emissive: 0xff4a2a,
-      emissiveIntensity: 0.9,
-      roughness: 1.0,
-    }),
+  const hole = new THREE.Mesh(
+    new THREE.SphereGeometry(r, 28, 28),
+    new THREE.MeshBasicMaterial({ color: 0x000000 }),
   );
+  const disk = makeAccretionDisk(r);
+  hole.add(disk);
+  accretionDisks.push({ disk, speed: 0.35 + (hashString(node.id) % 100) / 260 });
   const glow = new THREE.Sprite(
     new THREE.SpriteMaterial({
       map: GLOW_TEXTURE,
-      color: 0xff5a34,
+      color: 0xff7a2a,
       blending: THREE.AdditiveBlending,
       transparent: true,
       depthWrite: false,
-      opacity: 0.5,
+      opacity: 0.28,
     }),
   );
-  glow.scale.setScalar(r * 5);
-  mesh.add(glow);
-  return mesh;
+  glow.scale.setScalar(r * 3.2);
+  hole.add(glow);
+  return hole;
 }
 
 function smooth01(x, a, b) {
@@ -636,11 +636,39 @@ function makeSaturnRingTexture() {
 }
 const SATURN_RING_TEXTURE = makeSaturnRingTexture();
 
-function makeRing(planetR) {
-  const inner = planetR * 1.35;
-  const outer = planetR * 2.35;
-  const geo = new THREE.RingGeometry(inner, outer, 128, 4);
-  // Remap UVs radially so the ring texture's bands + Cassini gap follow radius.
+// A black hole's accretion disc: matter super-heated from a white-hot inner edge
+// out to a cooler crimson rim, faded at both edges. Mapped radially by
+// makeAccretionDisk so the gradient follows radius, additive so bloom lights it.
+function makeAccretionDiskTexture() {
+  const w = 512;
+  const h = 8;
+  const cv = document.createElement("canvas");
+  cv.width = w;
+  cv.height = h;
+  const ctx = cv.getContext("2d");
+  ctx.clearRect(0, 0, w, h);
+  const rand = mulberry32(0x9e3);
+  for (let x = 0; x < w; x++) {
+    const tt = x / (w - 1); // 0 = inner (hot), 1 = outer (cool)
+    let a = (1 - tt) ** 1.5;
+    a *= 0.8 + 0.2 * (0.5 + 0.5 * Math.sin(tt * 60)) + 0.06 * rand();
+    a *= Math.min(smooth01(tt, 0, 0.04), smooth01(1 - tt, 0, 0.22)); // fade edges
+    const gg = Math.floor(THREE.MathUtils.lerp(238, 74, tt));
+    const bb = Math.floor(THREE.MathUtils.lerp(205, 30, tt) * (1 - 0.55 * tt));
+    ctx.fillStyle = `rgba(255,${gg},${Math.max(0, bb)},${clamp01(a)})`;
+    ctx.fillRect(x, 0, 1, h);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+const ACCRETION_TEXTURE = makeAccretionDiskTexture();
+
+// A flat ring whose UVs are remapped radially (u = 0 at the inner edge → 1 at the
+// outer) so a 1-D gradient texture's bands follow the radius. Shared by the
+// Saturn ring and the black hole's accretion disc.
+function radialRingGeometry(inner, outer, segments) {
+  const geo = new THREE.RingGeometry(inner, outer, segments, 4);
   const pos = geo.attributes.position;
   const uv = geo.attributes.uv;
   for (let i = 0; i < pos.count; i++) {
@@ -648,8 +676,32 @@ function makeRing(planetR) {
     uv.setXY(i, (d - inner) / (outer - inner), 0.5);
   }
   uv.needsUpdate = true;
+  return geo;
+}
+
+// Tilted disc ring around the event horizon; the radial gradient runs hot→cool
+// from the inner edge outward, additive so bloom lights the inner rim.
+function makeAccretionDisk(planetR) {
+  const disk = new THREE.Mesh(
+    radialRingGeometry(planetR * 1.35, planetR * 3.0, 96),
+    new THREE.MeshBasicMaterial({
+      map: ACCRETION_TEXTURE,
+      transparent: true,
+      opacity: 0.95,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+  );
+  disk.rotation.x = Math.PI / 2 - 0.32; // tilt the disc toward the camera
+  disk.rotation.z = 0.18;
+  return disk;
+}
+
+function makeRing(planetR) {
+  // Radially-mapped so the ring texture's bands + Cassini gap follow the radius.
   const ring = new THREE.Mesh(
-    geo,
+    radialRingGeometry(planetR * 1.35, planetR * 2.35, 128),
     new THREE.MeshBasicMaterial({
       map: SATURN_RING_TEXTURE,
       transparent: true,
@@ -676,7 +728,6 @@ const SUN_BLOOM_FAR = 1.95;
 const edges = (Array.isArray(MODEL.edges) ? MODEL.edges : []).filter(
   (e) => planetById.has(e.source) && planetById.has(e.target),
 );
-const LINE_BASE = new THREE.Color(0x6b7280); // neutral grey (default connections)
 const LINE_DIM = new THREE.Color(0x191c22); // near-invisible while a planet is focused
 // The focused chain renders as a "Petrova line" (Project Hail Mary): a steady
 // crimson thread carrying a hot, white-pink light knot that flows from the sun
@@ -690,17 +741,36 @@ const PULSE_SPEED = 2.6; // radians/sec of the light knot flowing along the chai
 const PULSE_WAVES = 1.5; // number of light knots travelling the chain at once
 const PETROVA_TROUGH = 0.9; // steady crimson brightness between knots
 const PETROVA_CREST = 3.5; // HDR crest gain so a knot blooms into a white-hot glow
+// Unfocused connections keep their steady grey trajectory line as the main
+// element; a subtle cool "electron" glides back and forth along it — each edge
+// with its own phase/speed/direction so the web shimmers gently, without a
+// synchronised pulse or a blooming spark.
+const FLOW_BASE = new THREE.Color(0x6b7280); // the steady grey trajectory line
+const ELECTRON_COOL = new THREE.Color(0x9fb4d0); // travelling electron body (soft cool)
+const ELECTRON_HOT = new THREE.Color(0xc8d6e8); // electron core (gentle cool highlight)
+const FLOW_SPEED = 0.22; // base electron round-trips/sec (slow, calm drift)
+const FLOW_WIDTH = 0.12; // Gaussian half-width of the electron along the link
+const FLOW_CREST = 0.7; // mild brightening at the electron core (kept subtle)
 const _pulse = new THREE.Color();
+const edgeFlow = []; // per-edge { phase, speed, dir } for the idle electron flow
 let linkMesh = null;
 let linkPositions = null;
 let linkColors = null;
 
 function buildLinks() {
   if (edges.length === 0) return;
+  const flowRand = mulberry32(0xe1ec);
+  for (let i = 0; i < edges.length; i++) {
+    edgeFlow.push({
+      phase: flowRand(),
+      speed: 0.7 + flowRand() * 0.8,
+      dir: flowRand() < 0.5 ? -1 : 1,
+    });
+  }
   const verts = edges.length * SEG_PER_EDGE * 2;
   linkPositions = new Float32Array(verts * 3);
   linkColors = new Float32Array(verts * 3);
-  for (let v = 0; v < verts; v++) LINE_BASE.toArray(linkColors, v * 3);
+  for (let v = 0; v < verts; v++) FLOW_BASE.toArray(linkColors, v * 3);
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.BufferAttribute(linkPositions, 3));
   geo.setAttribute("color", new THREE.BufferAttribute(linkColors, 3));
@@ -781,8 +851,10 @@ function orderedChain(nodeId) {
   return chain;
 }
 
-// Paint every link once per change: dim base, a static crimson hover chain, and
-// the animated red "Petrova line" pulse that flows along the focused chain.
+// Paint every link each frame: the focused chain flows the red "Petrova line"
+// pulse, a hovered chain stays static crimson, other edges dim while a planet is
+// focused, and — in the default view — each link carries a lone electron
+// drifting back and forth along a faint track.
 function paintLinks(elapsed) {
   if (!linkMesh) return;
   const perEdge = SEG_PER_EDGE * 2;
@@ -796,10 +868,19 @@ function paintLinks(elapsed) {
       }
       continue;
     }
-    // Non-focus edges: a hovered chain stays a static crimson; the rest fade to
-    // near-invisible while a planet is selected so its trajectory reads clearly.
-    const c = hoverChain && hoverChain.has(i) ? PETROVA_HOVER : focusChain ? LINE_DIM : LINE_BASE;
-    for (let v = 0; v < perEdge; v++) c.toArray(linkColors, base + v * 3);
+    if (hoverChain && hoverChain.has(i)) {
+      for (let v = 0; v < perEdge; v++) PETROVA_HOVER.toArray(linkColors, base + v * 3);
+      continue;
+    }
+    if (focusChain) {
+      for (let v = 0; v < perEdge; v++) LINE_DIM.toArray(linkColors, base + v * 3);
+      continue;
+    }
+    const flow = edgeFlow[i];
+    for (let seg = 0; seg < SEG_PER_EDGE; seg++) {
+      writeElectron(base + seg * 6, seg / SEG_PER_EDGE, elapsed, flow);
+      writeElectron(base + seg * 6 + 3, (seg + 1) / SEG_PER_EDGE, elapsed, flow);
+    }
   }
   linkMesh.geometry.attributes.color.needsUpdate = true;
 }
@@ -811,6 +892,23 @@ function writePulse(offset, s, elapsed) {
     .copy(PETROVA_CORE)
     .lerp(PETROVA_HOT, knot)
     .multiplyScalar(PETROVA_TROUGH + PETROVA_CREST * knot);
+  _pulse.toArray(linkColors, offset);
+}
+
+// Colour one link vertex for the idle flow: the steady grey line plus a gentle
+// Gaussian electron whose centre rides a triangle wave 0→1→0 (so it flows out
+// and back), offset per edge by its phase/speed/direction.
+function writeElectron(offset, s, elapsed, flow) {
+  const cycles = flow.phase + flow.dir * elapsed * FLOW_SPEED * flow.speed;
+  const frac = cycles - Math.floor(cycles);
+  const tri = 1 - Math.abs(2 * frac - 1); // 0 → 1 → 0 along the link
+  const d = s - tri;
+  const spark = Math.exp(-(d * d) / (2 * FLOW_WIDTH * FLOW_WIDTH));
+  _pulse
+    .copy(FLOW_BASE)
+    .lerp(ELECTRON_COOL, spark)
+    .lerp(ELECTRON_HOT, spark * spark)
+    .multiplyScalar(1 + FLOW_CREST * spark * spark);
   _pulse.toArray(linkColors, offset);
 }
 
@@ -900,11 +998,9 @@ function onPointerMove(ev) {
     if (hovered) {
       hovered.scale.setScalar(1.16);
       hoverChain = new Set(orderedChain(hovered.userData.node.id));
-      linksDirty = true;
       showTooltip(hovered.userData.node);
     } else {
       hoverChain = null;
-      linksDirty = true;
       hideTooltip();
     }
   }
@@ -1104,6 +1200,7 @@ function animate() {
   for (const p of planets) {
     p.mesh.rotation.y += p.selfSpeed * dt * idleFactor;
   }
+  for (const d of accretionDisks) d.disk.rotateZ(d.speed * dt);
   starfield.rotation.y += dt * 0.005 * idleFactor;
   const zoom = THREE.MathUtils.clamp(
     (camera.position.length() - SUN_NEAR) / (SUN_FAR - SUN_NEAR),
@@ -1129,12 +1226,9 @@ function animate() {
   scene.updateMatrixWorld(true);
   updateLinks();
   const elapsed = clock.getElapsedTime();
-  if (focusChain) {
-    paintLinks(elapsed);
-    if (focusHalo) focusHalo.material.opacity = 0.55 + 0.3 * Math.sin(elapsed * PULSE_SPEED);
-  } else if (linksDirty) {
-    paintLinks(elapsed);
-    linksDirty = false;
+  paintLinks(elapsed);
+  if (focusChain && focusHalo) {
+    focusHalo.material.opacity = 0.55 + 0.3 * Math.sin(elapsed * PULSE_SPEED);
   }
   composer.render();
 }

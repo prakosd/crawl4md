@@ -17,6 +17,8 @@ from pathlib import Path
 
 from artifact_store.naming import SEARCH_FOLDER_PREFIX
 
+from app_support.rag_shared.result_snapshot import StoredResult, stored_results_from_payload
+
 __all__ = [
     "SEARCH_HISTORY_DIRNAME",
     "SearchRecord",
@@ -40,6 +42,7 @@ _CSV_COLUMNS = (
     "query",
     "top_k",
     "result_count",
+    "search_seconds",
     "top_score",
     "pinned",
 )
@@ -57,6 +60,8 @@ class SearchRecord:
     top_k: int
     result_count: int = 0
     top_score: float | None = None
+    search_seconds: float | None = None
+    results: tuple[StoredResult, ...] = ()
     pinned: bool = False
 
 
@@ -142,6 +147,7 @@ def _write_csv(path: Path, records: list[SearchRecord]) -> None:
                     record.query,
                     record.top_k,
                     record.result_count,
+                    "" if record.search_seconds is None else f"{record.search_seconds:.2f}",
                     "" if record.top_score is None else f"{record.top_score:.4f}",
                     record.pinned,
                 ]
@@ -153,6 +159,7 @@ def _record_from_payload(payload: object) -> SearchRecord | None:
         return None
     try:
         top_score = payload.get("top_score")
+        search_seconds = payload.get("search_seconds")
         return SearchRecord(
             timestamp_utc=str(payload["timestamp_utc"]),
             index_folder=str(payload.get("index_folder", "")),
@@ -162,6 +169,8 @@ def _record_from_payload(payload: object) -> SearchRecord | None:
             top_k=int(payload.get("top_k", 0)),
             result_count=int(payload.get("result_count", 0)),
             top_score=None if top_score in (None, "") else float(top_score),
+            search_seconds=None if search_seconds in (None, "") else float(search_seconds),
+            results=stored_results_from_payload(payload.get("results")),
             pinned=bool(payload.get("pinned", False)),
         )
     except (KeyError, TypeError, ValueError):
