@@ -178,7 +178,9 @@ def _auto_refresh_fragment(
 
 
 # ── Cached generated-file discovery ──────────────────────────────────────────
-@st.cache_data(ttl=_GENERATED_FILES_CACHE_TTL_SECONDS, show_spinner=False)
+@st.cache_data(
+    ttl=_GENERATED_FILES_CACHE_TTL_SECONDS, show_spinner=False, refresh_mode="background"
+)
 def _cached_list_generated_files(
     session_root: str,
     search_root: str,
@@ -193,6 +195,8 @@ def _cached_list_generated_files(
     )
 
 
-@st.cache_data(ttl=_GENERATED_FILES_CACHE_TTL_SECONDS, show_spinner=False)
+@st.cache_data(
+    ttl=_GENERATED_FILES_CACHE_TTL_SECONDS, show_spinner=False, refresh_mode="background"
+)
 def _cached_download_tree(files: tuple[GeneratedFile, ...]) -> dict[str, Any]:
     return build_download_tree(list(files))

@@ -61,7 +61,10 @@ from app_support.generated_files import (
     find_site_graph_file,
     find_site_graph_for_result,
     format_file_size,
+    format_history_folder_label,
     generated_files_cache_token,
+    history_exists,
+    import_history_zip,
     import_sample_fixture,
     import_signed_zip,
     import_target_name,
@@ -413,7 +416,10 @@ def render_download_tree(
             folder_label = name
             folder_node: Mapping[str, Any] = entry
             if allow_run_folder_collapse:
-                folder_label, folder_node = collapse_artifact_run_folder(name, entry)
+                if is_history_folder(name):
+                    folder_label = format_history_folder_label(name, entry)
+                else:
+                    folder_label, folder_node = collapse_artifact_run_folder(name, entry)
             with st.expander(folder_label, icon=download_folder_icon(name)):
                 render_download_tree(
                     folder_node,
@@ -569,6 +575,21 @@ def _import_uploaded_zip(zip_bytes: bytes) -> None:
     st.rerun()
 
 
+def _import_uploaded_history_zip(zip_bytes: bytes) -> None:
+    """Replace a per-session history folder in place from an uploaded history zip."""
+    secret = get_settings().zip_signing_secret
+    try:
+        replaced = import_history_zip(_session_root(), zip_bytes, secret)
+    except (OSError, ValueError):
+        replaced = None
+    st.session_state.upload_dialog_open = False
+    if replaced:
+        st.session_state.upload_done_folder = replaced
+        _cached_list_generated_files.clear()
+        _cached_download_tree.clear()
+    st.rerun()
+
+
 _SAMPLE_CATEGORY_CRAWL = "crawl_results"
 _SAMPLE_CATEGORY_VECTOR = "vector_indexes"
 
@@ -633,12 +654,36 @@ def _upload_folder_dialog() -> None:
     if not verify_zip_bytes(zip_bytes, get_settings().zip_signing_secret):
         st.error(strings["FILES_UPLOAD_INVALID"])
         return
-    target = import_target_name(_session_root(), zip_top_folder(zip_bytes) or "")
 
     def _cancel() -> None:
         st.session_state.upload_dialog_open = False
         st.rerun()
 
+    top = zip_top_folder(zip_bytes) or ""
+    if is_history_folder(top):
+        # History imports replace that folder in place. Always confirm (consistent
+        # with crawl/vector import); warn when there is existing data to overwrite.
+        overwrite = history_exists(_session_root(), top)
+        if overwrite:
+            body = strings["FILES_UPLOAD_HISTORY_OVERWRITE_BODY"].format(folder=top)
+            confirm_label = strings["FILES_UPLOAD_HISTORY_OVERWRITE_CONFIRM"]
+        else:
+            body = strings["FILES_UPLOAD_HISTORY_IMPORT_BODY"].format(folder=top)
+            confirm_label = strings["FILES_UPLOAD_CONFIRM"]
+        render_confirm_dialog(
+            body=body,
+            body_as_warning=overwrite,
+            cancel_label=strings["FILES_UPLOAD_CANCEL"],
+            cancel_key="upload_cancel_button",
+            on_cancel=_cancel,
+            confirm_label=confirm_label,
+            confirm_key="upload_confirm_button",
+            confirm_icon=":material/upload:",
+            on_confirm=lambda: _import_uploaded_history_zip(zip_bytes),
+        )
+        return
+
+    target = import_target_name(_session_root(), top)
     render_confirm_dialog(
         body=strings["FILES_UPLOAD_CONFIRM_BODY"].format(folder=target),
         cancel_label=strings["FILES_UPLOAD_CANCEL"],
@@ -754,7 +799,7 @@ def _downloads_body() -> None:
             for file in files
         ]
         with st.expander(strings["FILES_HEADER"], expanded=False):
-            st.dataframe(rows, hide_index=True, width="stretch")
+            st.dataframe(rows, hide_index=True, width="stretch", lazy=True)
 
     _render_sample_data_panel()
 

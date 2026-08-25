@@ -26,9 +26,12 @@ from app_support.generated_files import (
     find_site_graph_for_result,
     folder_zip_cache_token,
     format_file_size,
+    format_history_folder_label,
     format_run_timestamp_label,
     generated_file_sort_key,
     generated_files_cache_token,
+    history_exists,
+    import_history_zip,
     import_sample_fixture,
     import_signed_zip,
     import_target_name,
@@ -229,6 +232,54 @@ def test_format_run_timestamp_label_prefers_progress_history_timestamp(tmp_path:
     )
 
 
+def test_format_history_folder_label_uses_first_record_created_time(tmp_path: Path) -> None:
+    local_timezone = timezone(timedelta(hours=10), "AEST")
+    history_path = tmp_path / "search_history.jsonl"
+    history_path.write_text(
+        '{"timestamp_utc":"2026-07-12T04:21:46+00:00","query":"first"}\n'
+        '{"timestamp_utc":"2026-07-13T05:00:00+00:00","query":"later"}\n',
+        encoding="utf-8",
+    )
+    history_file = GeneratedFile(
+        path=history_path,
+        relative_path="search_history/search_history.jsonl",
+        name="search_history.jsonl",
+        size_bytes=history_path.stat().st_size,
+        modified_at=_MODIFIED_AT,
+        file_type="jsonl",
+        download_allowed=True,
+    )
+
+    assert (
+        format_history_folder_label(
+            "search_history",
+            {"search_history.jsonl": history_file},
+            local_timezone=local_timezone,
+        )
+        == "search_history/2026-07-12_04-21-46 (12 July 2026 14:21 AEST)"
+    )
+
+
+def test_format_history_folder_label_falls_back_to_name_without_records(tmp_path: Path) -> None:
+    empty_path = tmp_path / "search_history.jsonl"
+    empty_path.write_text("", encoding="utf-8")
+    empty_file = GeneratedFile(
+        path=empty_path,
+        relative_path="search_history/search_history.jsonl",
+        name="search_history.jsonl",
+        size_bytes=0,
+        modified_at=_MODIFIED_AT,
+        file_type="jsonl",
+        download_allowed=True,
+    )
+
+    assert format_history_folder_label("search_history", {}) == "search_history"
+    assert (
+        format_history_folder_label("search_history", {"search_history.jsonl": empty_file})
+        == "search_history"
+    )
+
+
 def test_generated_files_cache_token_handles_missing_path(tmp_path: Path) -> None:
     assert generated_files_cache_token(tmp_path / "missing") == (0.0, 0)
 
@@ -301,6 +352,62 @@ def test_import_signed_zip_rejects_wrong_secret(tmp_path: Path) -> None:
     signed = build_folder_zip_bytes(session, "crawl_01_river", signing_secret="k")
 
     assert import_signed_zip(session, signed, "other") is None
+
+
+def test_import_history_zip_replaces_existing_folder(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    history = source / "basic_rag_qa_history"
+    history.mkdir(parents=True)
+    record = '{"timestamp_utc":"2026-07-12T04:21:46+00:00","prompt":"new"}\n'
+    (history / "basic_rag_qa_history.jsonl").write_text(record, encoding="utf-8")
+    (history / "prompt_template.txt").write_text("MY TEMPLATE", encoding="utf-8")
+    signed = build_folder_zip_bytes(source, "basic_rag_qa_history", signing_secret="k")
+
+    target = tmp_path / "target"
+    existing = target / "basic_rag_qa_history"
+    existing.mkdir(parents=True)
+    (existing / "basic_rag_qa_history.jsonl").write_text("old", encoding="utf-8")
+    (existing / "stale.txt").write_text("stale", encoding="utf-8")
+
+    replaced = import_history_zip(target, signed, "k")
+
+    assert replaced == "basic_rag_qa_history"
+    imported = target / "basic_rag_qa_history"
+    assert (imported / "basic_rag_qa_history.jsonl").read_text(encoding="utf-8") == record
+    assert (imported / "prompt_template.txt").read_text(encoding="utf-8") == "MY TEMPLATE"
+    # Full replace: the previous history's stale file is gone.
+    assert not (imported / "stale.txt").exists()
+
+
+def test_import_history_zip_rejects_foreign_top_folder(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    (source / "crawl_01_river" / "final").mkdir(parents=True)
+    (source / "crawl_01_river" / "final" / "page.md").write_text("hi", encoding="utf-8")
+    signed = build_folder_zip_bytes(source, "crawl_01_river", signing_secret="k")
+
+    target = tmp_path / "target"
+    target.mkdir()
+
+    assert import_history_zip(target, signed, "k") is None
+    assert not (target / "crawl_01_river").exists()
+
+
+def test_import_history_zip_rejects_wrong_secret(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    history = source / "search_history"
+    history.mkdir(parents=True)
+    (history / "search_history.jsonl").write_text("{}\n", encoding="utf-8")
+    signed = build_folder_zip_bytes(source, "search_history", signing_secret="k")
+
+    assert import_history_zip(tmp_path / "target", signed, "other") is None
+
+
+def test_history_exists_reflects_folder_state(tmp_path: Path) -> None:
+    assert history_exists(tmp_path, "search_history") is False
+    (tmp_path / "search_history").mkdir()
+    assert history_exists(tmp_path, "search_history") is False
+    (tmp_path / "search_history" / "search_history.jsonl").write_text("{}\n", encoding="utf-8")
+    assert history_exists(tmp_path, "search_history") is True
 
 
 def _write_fixture_zip(fixtures_root: Path, category: str, folder: str) -> None:

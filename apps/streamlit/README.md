@@ -363,7 +363,7 @@ behavior), see [Output Structure](../../README.md#output-structure) in the root 
 **Exploring a crawl in 3D.** Each `crawl_*` folder's action row carries a second control —
 **:material/bubble_chart: Explore in 3D**, sitting right of its **Export** button — and the
 **📦 Crawl results ready** panel offers the same control beside its **Download** button (split 50/50).
-Either opens an interactive Three.js "universe" of the crawl in a new browser tab: one planet per page (sized by page weight, surfaced by information richness, coloured by crawl status — **failed pages become realistic black holes** (a dark event horizon ringed by a glowing, spinning accretion disc) — ringed when large), the
+Either opens an interactive Three.js "universe" of the crawl in a new browser tab: one planet per page (sized by page weight, surfaced by information richness, coloured by crawl status — **failed pages become realistic black holes** (a dark event horizon ringed by a glowing, spinning accretion disc, warped by a screen-space **gravitational-lensing** pass that bends the surrounding light and lights a photon ring) — ringed when large), the
 seed page as a central sun, each page's children orbiting that page (a nested orrery) so busy pages
 fling their sub-pages out into their own separated clusters, and orbit-links to the page each was
 discovered from that shimmer with a lone **electron** drifting back and forth (random per-link
@@ -393,13 +393,23 @@ it — named `<folder>.zip`. The pure
 wrapper so the archive is rebuilt only when the folder's contents change. The button respects the
 app download-size guard (`UI_DOWNLOAD_LIMIT_MB`): an oversized folder shows a disabled button with
 a "too large" tooltip, like per-file downloads. Each download is signed with an HMAC `.crawl4md.sig`
-sidecar (`ZIP_SIGNING_SECRET`) so it can later be re-uploaded.
+sidecar (`ZIP_SIGNING_SECRET`) so it can later be re-uploaded. In the download tree each history
+folder's panel is labelled with its created timestamp (read from the first record in `<folder>.jsonl`,
+e.g. `search_history/2026-07-12_04-21-46 (12 July 2026 14:21 AEST)`) via
+`generated_files.format_history_folder_label`, matching crawl/vector run-folder labels.
 
 **Uploading a folder zip.** The Output Files subtitle links to an upload dialog (`Click here to
 upload`). A chosen zip is verified with `verify_zip_bytes`; an altered file or a zip signed with a
-different key is rejected in-dialog. A valid zip prompts a confirm dialog naming the conflict-free
-folder it will become, then `generated_files.import_signed_zip` re-imports it under the next free
-`crawl_*`/`vector_*` sequence and a success toast fires. Extraction is zip-slip-safe.
+different key is rejected in-dialog. A crawl/vector zip prompts a confirm dialog naming the
+conflict-free folder it will become, then `generated_files.import_signed_zip` re-imports it under
+the next free `crawl_*`/`vector_*` sequence and a success toast fires. A **history** zip
+(`search_history`/`basic_rag_qa_history`) instead **replaces that history in place** via
+`generated_files.import_history_zip` — whitelisted to those two folder names so a crafted zip can't
+overwrite crawl/vector output. An upload always shows a confirm dialog first — a warning that the
+existing history will be replaced when the session already holds it, otherwise a plain "imported
+as" confirmation. The imported records (and, for Q&A,
+the `prompt_template.txt`) reappear in the page's history panel on the next rerun. Extraction is
+zip-slip-safe.
 
 **Deleting a folder.** Each top-level `crawl_*`/`vector_*` run folder — and the fixed
 `search_history` and `basic_rag_qa_history` folders — carries a red **Delete this folder** button

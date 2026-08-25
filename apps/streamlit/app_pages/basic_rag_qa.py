@@ -902,7 +902,7 @@ def _render_transaction_history(strings: Strings, records: Sequence[BasicQaRecor
                 icon=":material/download:",
                 help=strings["BASIC_QA_TXN_CSV_HELP"],
             )
-        st.dataframe(rows, hide_index=True, width="stretch")
+        st.dataframe(rows, hide_index=True, width="stretch", lazy=True)
         _render_cost_disclaimer(strings)
 
 

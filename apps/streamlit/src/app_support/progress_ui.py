@@ -311,6 +311,7 @@ def render_progress_and_files(
             delta=processed_delta,
             delta_color="off",
             help=strings["METRIC_PROCESSED_TOOLTIP"],
+            icon=":material/checklist:",
             border=True,
         )
         row1[1].metric(
@@ -319,6 +320,7 @@ def render_progress_and_files(
             delta=strings["METRIC_SUCCESSFUL_DELTA"].format(n=f"{successful:,}"),
             delta_color="normal",
             help=strings["METRIC_SUCCESSFUL_TOOLTIP"],
+            icon=":material/check_circle:",
             border=True,
         )
         row1[2].metric(
@@ -327,6 +329,7 @@ def render_progress_and_files(
             delta=strings["METRIC_FAILED_DELTA"].format(n=f"{failed:,}"),
             delta_color="inverse",
             help=strings["METRIC_FAILED_TOOLTIP"],
+            icon=":material/error:",
             border=True,
         )
 
@@ -346,6 +349,7 @@ def render_progress_and_files(
             ),
             delta_color="normal",
             help=strings["METRIC_DISCOVERED_TOOLTIP"],
+            icon=":material/manage_search:",
             border=True,
         )
         row2[1].metric(
@@ -354,6 +358,7 @@ def render_progress_and_files(
             delta=limit_status_delta,
             delta_color="off",
             help=strings["METRIC_LIMIT_TOOLTIP"],
+            icon=":material/flag:",
             border=True,
         )
         with row2[2]:
@@ -377,11 +382,12 @@ def render_progress_and_files(
                 )
             else:
                 st.metric(
-                    label=f"{state_icon} {strings['METRIC_STATE_WORD']}",
+                    label=strings["METRIC_STATE_WORD"],
                     value=state_label,
                     delta=strings["METRIC_STATE_DELTA"],
                     delta_color="off",
                     help=strings["METRIC_STATE_TOOLTIP"],
+                    icon=state_icon,
                     border=True,
                 )
 

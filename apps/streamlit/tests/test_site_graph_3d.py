@@ -510,6 +510,28 @@ def test_build_viewer_html_embeds_graph_labels_and_cdn() -> None:
     assert "three/addons/" in html  # import map wired
 
 
+# Risk: failed pages render as black holes with a screen-space gravitational-lens
+# pass; if the pass or its per-frame projection were dropped the lensing silently
+# disappears. Verify the lensing code is inlined into the viewer. Type: unit.
+def test_build_viewer_html_includes_black_hole_lensing() -> None:
+    html = build_viewer_html(
+        _jsonl(
+            {
+                "url": "https://x.com",
+                "discovered_from": None,
+                "page_size_kb": 5.0,
+                "status": "success",
+                "depth": 0,
+                "round_num": 1,
+            }
+        ),
+        {},
+    )
+    assert "postprocessing/ShaderPass.js" in html  # lens pass imported
+    assert "blackHoleLensShader" in html  # custom lensing shader inlined
+    assert "updateLensUniforms" in html  # per-frame hole projection wired
+
+
 # Risk: a crawled URL could contain "</script>"; injected verbatim it would break
 # out of the bootstrap script tag. Verify the data is escaped, not raw. Type: unit.
 def test_build_viewer_html_escapes_script_breakout() -> None:

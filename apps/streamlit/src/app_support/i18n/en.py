@@ -23,7 +23,7 @@ STRINGS_EN: Strings = {
     "SESSION_EXPIRY_CAPTION_HOURS": "This session expires in {hours} hours \u2014 all files will be deleted.",
     "SESSION_EXPIRY_CAPTION_HOURS_SINGULAR": "This session expires in 1 hour \u2014 all files will be deleted.",
     "SESSION_EXPIRY_CAPTION_SOON": "This session is expiring soon \u2014 all files will be deleted.",
-    "SESSION_CREATE_BUTTON_TOOLTIP": "Create a separate session (keeps current results)",
+    "SESSION_CREATE_BUTTON_TOOLTIP": "Create a separate session (starts fresh)",
     "SESSION_LOAD_BUTTON_TOOLTIP": "Load an existing session by ID",
     "SESSION_EXTEND_BUTTON_TOOLTIP": "Extend session — gives up to 7 days from now",
     "PROGRESS_HEADER": "⏳ Progress",
@@ -485,6 +485,12 @@ STRINGS_EN: Strings = {
     "FILES_UPLOAD_CONFIRM": "Upload",
     "FILES_UPLOAD_CANCEL": "Cancel",
     "FILES_UPLOAD_SUCCESS": "Upload complete — added {folder}.",
+    "FILES_UPLOAD_HISTORY_IMPORT_BODY": "Verified. It will be imported as **{folder}**. Continue?",
+    "FILES_UPLOAD_HISTORY_OVERWRITE_BODY": (
+        "**{folder}** already has data. Importing replaces it — the current history is "
+        "permanently deleted. Continue?"
+    ),
+    "FILES_UPLOAD_HISTORY_OVERWRITE_CONFIRM": "Replace",
     "FILES_SAMPLE_PANEL_TITLE": ":material/dataset: Sample data",
     "FILES_SAMPLE_PANEL_CAPTION": (
         "Import a ready-made crawl or index to skip Steps 1-2 and jump straight to Semantic search."

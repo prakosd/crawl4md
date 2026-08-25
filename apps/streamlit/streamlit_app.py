@@ -82,6 +82,7 @@ from app_support.session_manager import (
     generate_vector_id,
     next_vector_sequence,
 )
+from app_support.session_reset import clear_transient_result_state
 from app_support.settings import get_settings
 from app_support.site_graph_3d.static_publish import remove_orrery_static
 from app_support.support import (
@@ -1087,6 +1088,9 @@ def _select_session_id(session_id: str, *, restore_language: bool = True) -> Non
         st.session_state.vector_index_stage = ""
         st.session_state.vector_index_result = {}
         st.session_state.vector_index_started_at = None
+        # Drop Step 3/4 search hits and generated answer so the switched-to
+        # session starts clean instead of showing the previous one's results.
+        clear_transient_result_state(st.session_state)
         # Persist the newly selected session id back to browser storage only on change.
         st.session_state.pending_selected_session_id = session_id
     st.session_state.session_id = session_id

@@ -7,6 +7,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import {
   forceSimulation,
   forceManyBody,
@@ -120,9 +121,76 @@ scene.add(new THREE.HemisphereLight(0x9fb4ff, 0x140f22, 0.35));
 const centralLight = new THREE.PointLight(0xfff1d4, 3.0, 0, 0);
 systemGroup.add(centralLight);
 
-// ── Post-processing (bloom makes the suns glow) ──────────────────────────────
+// ── Post-processing ──────────────────────────────────────────────────────────
+// A screen-space gravitational-lensing pass warps the rendered image around each
+// black hole (light bending) and draws its photon ring; bloom then makes the suns
+// and that ring glow. Capped at MAX_LENSED_HOLES per frame and disabled entirely
+// when the crawl has no failed pages, so it costs nothing in the common case.
+const MAX_LENSED_HOLES = 6;
+const blackHoles = []; // { mesh, radius } — projected to screen space each frame
+const blackHoleLensShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+    holeCount: { value: 0 },
+    holeCenter: {
+      value: Array.from({ length: MAX_LENSED_HOLES }, () => new THREE.Vector2()),
+    },
+    holeRadius: { value: new Float32Array(MAX_LENSED_HOLES) },
+  },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    #define MAX_HOLES ${MAX_LENSED_HOLES}
+    uniform sampler2D tDiffuse;
+    uniform vec2 resolution;
+    uniform int holeCount;
+    uniform vec2 holeCenter[MAX_HOLES];
+    uniform float holeRadius[MAX_HOLES];
+    varying vec2 vUv;
+    void main() {
+      float aspect = resolution.x / resolution.y;
+      vec3 color = texture2D(tDiffuse, vUv).rgb;
+      vec3 ring = vec3(0.0);
+      float shadow = 0.0;
+      for (int i = 0; i < MAX_HOLES; i++) {
+        if (i >= holeCount) break;
+        float rs = holeRadius[i];
+        if (rs <= 0.0) continue;
+        vec2 d = vUv - holeCenter[i];
+        d.x *= aspect;                        // isotropic (screen-height) units
+        float dist = length(d);
+        vec2 dir = dist > 1e-4 ? d / dist : vec2(0.0);
+        // Bend light toward the mass ~ rs^2 / dist, strongest at the horizon and
+        // fading to nothing a few radii out so the far field stays untouched.
+        float defl = min(rs * rs / max(dist, 1e-4), rs * 3.0);
+        float influence = smoothstep(rs * 5.0, rs * 1.05, dist);
+        vec2 warp = vec2(dir.x / aspect, dir.y) * defl * influence;
+        color = texture2D(tDiffuse, vUv - warp).rgb;
+        // Photon ring: a thin warm band hugging the horizon (bloom lights it up).
+        float band = smoothstep(rs * 1.5, rs * 1.08, dist) *
+                     smoothstep(rs * 0.92, rs * 1.06, dist);
+        ring += vec3(1.0, 0.72, 0.38) * band * 1.6;
+        // Event-horizon shadow: the dark disc the light bends around.
+        shadow = max(shadow, smoothstep(rs * 1.04, rs * 0.97, dist));
+      }
+      color = mix(color, vec3(0.0), shadow);
+      color += ring;
+      gl_FragColor = vec4(color, 1.0);
+    }
+  `,
+};
+
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
+const lensPass = new ShaderPass(blackHoleLensShader);
+lensPass.enabled = false; // switched on in animate() only while holes are on-screen
+composer.addPass(lensPass);
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
   1.15, // strength
@@ -130,6 +198,33 @@ const bloomPass = new UnrealBloomPass(
   0.62, // threshold — only bright emissive suns bloom
 );
 composer.addPass(bloomPass);
+
+// Reused temporaries for projecting each black hole to screen space each frame.
+const _lensWorld = new THREE.Vector3();
+const _lensCenter = new THREE.Vector3();
+const _lensEdge = new THREE.Vector3();
+const _lensUp = new THREE.Vector3();
+
+function updateLensUniforms() {
+  const u = lensPass.uniforms;
+  camera.updateMatrixWorld(); // refresh matrixWorldInverse so project() isn't a frame behind
+  _lensUp.setFromMatrixColumn(camera.matrixWorld, 1); // world-space camera up
+  let count = 0;
+  for (const bh of blackHoles) {
+    if (count >= MAX_LENSED_HOLES) break;
+    bh.mesh.getWorldPosition(_lensWorld);
+    _lensCenter.copy(_lensWorld).project(camera);
+    if (_lensCenter.z > 1.0) continue; // behind the camera / beyond the far plane
+    _lensEdge.copy(_lensWorld).addScaledVector(_lensUp, bh.radius).project(camera);
+    const radiusUv = Math.abs(_lensEdge.y - _lensCenter.y) * 0.5;
+    if (radiusUv <= 0.0) continue;
+    u.holeCenter.value[count].set(_lensCenter.x * 0.5 + 0.5, _lensCenter.y * 0.5 + 0.5);
+    u.holeRadius.value[count] = radiusUv;
+    count++;
+  }
+  u.holeCount.value = count;
+  lensPass.enabled = count > 0;
+}
 
 // ── Controls ─────────────────────────────────────────────────────────────────
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -603,6 +698,7 @@ function makeBlackHole(node) {
   );
   glow.scale.setScalar(r * 3.2);
   hole.add(glow);
+  blackHoles.push({ mesh: hole, radius: r });
   return hole;
 }
 
@@ -746,11 +842,11 @@ const PETROVA_CREST = 3.5; // HDR crest gain so a knot blooms into a white-hot g
 // with its own phase/speed/direction so the web shimmers gently, without a
 // synchronised pulse or a blooming spark.
 const FLOW_BASE = new THREE.Color(0x6b7280); // the steady grey trajectory line
-const ELECTRON_COOL = new THREE.Color(0x9fb4d0); // travelling electron body (soft cool)
-const ELECTRON_HOT = new THREE.Color(0xc8d6e8); // electron core (gentle cool highlight)
-const FLOW_SPEED = 0.22; // base electron round-trips/sec (slow, calm drift)
+const ELECTRON_COOL = new THREE.Color(0x828fa0); // travelling electron body (muted cool)
+const ELECTRON_HOT = new THREE.Color(0xa6b2c2); // electron core (faint cool highlight)
+const FLOW_SPEED = 0.1; // base electron round-trips/sec (slow, calm drift)
 const FLOW_WIDTH = 0.12; // Gaussian half-width of the electron along the link
-const FLOW_CREST = 0.7; // mild brightening at the electron core (kept subtle)
+const FLOW_CREST = 0.32; // mild brightening at the electron core (kept subtle)
 const _pulse = new THREE.Color();
 const edgeFlow = []; // per-edge { phase, speed, dir } for the idle electron flow
 let linkMesh = null;
@@ -1180,6 +1276,7 @@ function onResize() {
   renderer.setSize(w, h);
   composer.setSize(w, h);
   bloomPass.resolution.set(w, h);
+  lensPass.uniforms.resolution.value.set(w, h);
 }
 window.addEventListener("resize", onResize);
 
@@ -1230,6 +1327,7 @@ function animate() {
   if (focusChain && focusHalo) {
     focusHalo.material.opacity = 0.55 + 0.3 * Math.sin(elapsed * PULSE_SPEED);
   }
+  updateLensUniforms();
   composer.render();
 }
 

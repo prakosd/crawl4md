@@ -1,6 +1,65 @@
 from __future__ import annotations
 
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+import pytest
+
 from app_support import downloads_ui
+
+
+class _State(dict):
+    """A session_state stand-in supporting both attribute and item access."""
+
+    __getattr__ = dict.get  # type: ignore[assignment]
+    __setattr__ = dict.__setitem__  # type: ignore[assignment]
+
+
+# Risk: importing a history zip must replace in place, flag the success toast, and
+# bust the file-listing caches so the panel repopulates. Type: unit.
+def test_import_uploaded_history_zip_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_st = MagicMock()
+    fake_st.session_state = _State()
+    list_cache = MagicMock()
+    tree_cache = MagicMock()
+    monkeypatch.setattr(downloads_ui, "st", fake_st)
+    monkeypatch.setattr(
+        downloads_ui, "get_settings", lambda: SimpleNamespace(zip_signing_secret="k")
+    )
+    monkeypatch.setattr(downloads_ui, "_session_root", lambda: Path("/session"))
+    monkeypatch.setattr(
+        downloads_ui, "import_history_zip", lambda root, data, secret: "search_history"
+    )
+    monkeypatch.setattr(downloads_ui, "_cached_list_generated_files", list_cache)
+    monkeypatch.setattr(downloads_ui, "_cached_download_tree", tree_cache)
+
+    downloads_ui._import_uploaded_history_zip(b"zip")
+
+    assert fake_st.session_state["upload_done_folder"] == "search_history"
+    assert fake_st.session_state["upload_dialog_open"] is False
+    list_cache.clear.assert_called_once()
+    tree_cache.clear.assert_called_once()
+    fake_st.rerun.assert_called_once()
+
+
+# Risk: a rejected history import (bad signature / foreign folder) must not flag a
+# success toast, but must still close the dialog. Type: unit.
+def test_import_uploaded_history_zip_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_st = MagicMock()
+    fake_st.session_state = _State()
+    monkeypatch.setattr(downloads_ui, "st", fake_st)
+    monkeypatch.setattr(
+        downloads_ui, "get_settings", lambda: SimpleNamespace(zip_signing_secret="k")
+    )
+    monkeypatch.setattr(downloads_ui, "_session_root", lambda: Path("/session"))
+    monkeypatch.setattr(downloads_ui, "import_history_zip", lambda root, data, secret: None)
+
+    downloads_ui._import_uploaded_history_zip(b"zip")
+
+    assert "upload_done_folder" not in fake_st.session_state
+    assert fake_st.session_state["upload_dialog_open"] is False
+    fake_st.rerun.assert_called_once()
 
 
 # Risk: the preview modal shows file timestamps; a bad epoch must not crash the

@@ -24,7 +24,7 @@ STRINGS_ID: Strings = {
     "SESSION_EXPIRY_CAPTION_HOURS": "Sesi ini akan kedaluwarsa dalam {hours} jam \u2014 semua file akan dihapus.",
     "SESSION_EXPIRY_CAPTION_HOURS_SINGULAR": "Sesi ini akan kedaluwarsa dalam 1 jam \u2014 semua file akan dihapus.",
     "SESSION_EXPIRY_CAPTION_SOON": "Sesi ini akan segera kedaluwarsa \u2014 semua file akan dihapus.",
-    "SESSION_CREATE_BUTTON_TOOLTIP": "Buat sesi terpisah (hasil saat ini tetap tersimpan)",
+    "SESSION_CREATE_BUTTON_TOOLTIP": "Buat sesi terpisah (mulai dari awal)",
     "SESSION_LOAD_BUTTON_TOOLTIP": "Muat sesi yang ada berdasarkan ID",
     "SESSION_EXTEND_BUTTON_TOOLTIP": "Perpanjang sesi — memberikan hingga 7 hari dari sekarang",
     "PROGRESS_HEADER": "⏳ Progres",
@@ -496,6 +496,12 @@ STRINGS_ID: Strings = {
     "FILES_UPLOAD_CONFIRM": "Unggah",
     "FILES_UPLOAD_CANCEL": "Batal",
     "FILES_UPLOAD_SUCCESS": "Unggahan selesai — menambahkan {folder}.",
+    "FILES_UPLOAD_HISTORY_IMPORT_BODY": "Terverifikasi. Akan diimpor sebagai **{folder}**. Lanjutkan?",
+    "FILES_UPLOAD_HISTORY_OVERWRITE_BODY": (
+        "**{folder}** sudah berisi data. Mengimpor akan menggantinya — riwayat saat ini "
+        "dihapus permanen. Lanjutkan?"
+    ),
+    "FILES_UPLOAD_HISTORY_OVERWRITE_CONFIRM": "Ganti",
     "FILES_SAMPLE_PANEL_TITLE": ":material/dataset: Data contoh",
     "FILES_SAMPLE_PANEL_CAPTION": (
         "Impor crawl atau indeks siap pakai untuk melewati Langkah 1-2 dan langsung "

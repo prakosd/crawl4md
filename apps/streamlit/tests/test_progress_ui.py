@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -21,6 +22,28 @@ def test_linkify_log_line_wraps_urls_as_safe_links() -> None:
     assert '<a href="https://example.com/x"' in result
     assert 'target="_blank"' in result
     assert 'rel="noopener noreferrer"' in result
+
+
+# Risk: every Step 1 progress metric shows a leading icon (Streamlit 1.61 icon=)
+# so the cards stay scannable. Type: unit.
+def test_render_progress_metrics_all_have_icons(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _State(dict):
+        __getattr__ = dict.get  # type: ignore[assignment]
+
+    fake_st = MagicMock()
+    fake_st.session_state = _State(language="EN", started_at=None, job_state="completed")
+    monkeypatch.setattr(progress_ui, "st", fake_st)
+
+    progress_ui.render_progress_and_files(
+        processed=1, successful=1, failed=0, discovered=2, limit=10, state="completed"
+    )
+
+    column_metric = fake_st.columns.return_value.__getitem__.return_value.metric
+    column_icons = [call.kwargs.get("icon") for call in column_metric.call_args_list]
+    assert column_icons and all(column_icons)
+    # A non-running state renders through st.metric with the status emoji as icon.
+    state_icons = [call.kwargs.get("icon") for call in fake_st.metric.call_args_list]
+    assert state_icons and all(state_icons)
 
 
 # Risk: a progress event must update the per-chunk counters that drive the bar and

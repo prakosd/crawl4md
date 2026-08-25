@@ -29,6 +29,7 @@ from artifact_store.naming import (
     VECTOR_FOLDER_PREFIX,
     folder_name,
     format_sequence_id,
+    format_utc_timestamp_slug,
     parse_folder_sequence,
     sequence_sort_key,
 )
@@ -315,6 +316,44 @@ def import_signed_zip(session_root: Path | str, zip_bytes: bytes, secret: str) -
     if not verify_zip_bytes(zip_bytes, secret):
         return None
     return _extract_zip_to_new_folder(session_root, zip_bytes)
+
+
+def history_exists(session_root: Path | str, dirname: str) -> bool:
+    """Return ``True`` when *dirname* is a non-empty history folder in the session."""
+    directory = Path(session_root) / dirname
+    return directory.is_dir() and any(directory.iterdir())
+
+
+def import_history_zip(session_root: Path | str, zip_bytes: bytes, secret: str) -> str | None:
+    """Verify and extract a history zip, replacing that history folder in place.
+
+    Only the fixed per-session history folders (``search_history``,
+    ``basic_rag_qa_history``) may be imported this way; any other top-level folder
+    is rejected so a crafted zip can't overwrite crawl/vector output. Any existing
+    folder of that name is deleted and replaced. Extraction is zip-slip-safe
+    (:func:`extract_all_members`). Returns the replaced folder name, or None when
+    the signature is invalid or the zip isn't a recognized history export.
+    """
+    if not verify_zip_bytes(zip_bytes, secret):
+        return None
+    top = zip_top_folder(zip_bytes)
+    if top not in _HISTORY_FOLDER_NAMES:
+        return None
+    root = Path(session_root).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    destination = ensure_within_root(root, root / top)
+    staging = Path(tempfile.mkdtemp(dir=root))
+    try:
+        extract_all_members(io.BytesIO(zip_bytes), staging)
+        source = staging / top
+        if not source.is_dir():
+            return None
+        if destination.exists():
+            shutil.rmtree(destination)
+        shutil.move(str(source), str(destination))
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+    return top
 
 
 @dataclass(frozen=True)
@@ -711,6 +750,25 @@ def format_run_timestamp_label(
     return f"{folder_name} ({_format_local_timestamp(timestamp, local_timezone=local_timezone)})"
 
 
+def format_history_folder_label(
+    folder_name: str,
+    folder_node: dict[str, Any] | None = None,
+    *,
+    local_timezone: tzinfo | None = None,
+) -> str:
+    """Return a history folder label with its created timestamp, like run folders.
+
+    History folders aren't timestamped on disk, so the created time comes from the
+    first record and renders as a ``<slug> (local time)`` suffix mirroring crawl /
+    vector runs. Falls back to the plain name when the history has no records yet.
+    """
+    timestamp = _history_created_timestamp(folder_name, folder_node)
+    if timestamp is None:
+        return folder_name
+    slug = format_utc_timestamp_slug(timestamp)
+    return f"{folder_name}/{slug} ({_format_local_timestamp(timestamp, local_timezone=local_timezone)})"
+
+
 def format_file_size(size_bytes: int) -> str:
     """Return a compact human-readable file size like '5.9 MB' or '0.4 KB'.
 
@@ -782,15 +840,8 @@ def _find_generated_file(
     return None
 
 
-def _timestamp_from_progress_history_line(line: str) -> datetime | None:
-    stripped = line.strip()
-    if not stripped:
-        return None
-    try:
-        payload = json.loads(stripped)
-    except json.JSONDecodeError:
-        return None
-    value = payload.get("timestamp")
+def _parse_iso_utc(value: object) -> datetime | None:
+    """Parse an ISO-8601 string (``Z`` or offset, naive treated as UTC) to UTC."""
     if not isinstance(value, str) or not value.strip():
         return None
     normalized = value.strip()
@@ -803,6 +854,46 @@ def _timestamp_from_progress_history_line(line: str) -> datetime | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def _timestamp_from_progress_history_line(line: str) -> datetime | None:
+    stripped = line.strip()
+    if not stripped:
+        return None
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+    return _parse_iso_utc(payload.get("timestamp"))
+
+
+def _history_created_timestamp(
+    folder_name: str, folder_node: dict[str, Any] | None
+) -> datetime | None:
+    """Return the created time of a history folder from its first record.
+
+    History logs (``<folder_name>.jsonl``) append oldest-first, so the first
+    parseable ``timestamp_utc`` is when the history began.
+    """
+    history_file = _find_generated_file(folder_node, f"{folder_name}.jsonl")
+    if history_file is None:
+        return None
+    try:
+        with history_file.path.open(encoding="utf-8") as handle:
+            for line in handle:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    payload = json.loads(stripped)
+                except json.JSONDecodeError:
+                    continue
+                timestamp = _parse_iso_utc(payload.get("timestamp_utc"))
+                if timestamp is not None:
+                    return timestamp
+    except OSError:
+        return None
+    return None
 
 
 def collect_success_content_files(crawl_output_dir: Path, root: Path) -> list[Path]:
