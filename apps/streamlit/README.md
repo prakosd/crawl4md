@@ -363,7 +363,7 @@ behavior), see [Output Structure](../../README.md#output-structure) in the root 
 **Exploring a crawl in 3D.** Each `crawl_*` folder's action row carries a second control —
 **:material/bubble_chart: Explore in 3D**, sitting right of its **Export** button — and the
 **📦 Crawl results ready** panel offers the same control beside its **Download** button (split 50/50).
-Either opens an interactive Three.js "universe" of the crawl in a new browser tab: one planet per page (sized by page weight, surfaced by information richness, coloured by crawl status — **failed pages become realistic black holes** (a dark event horizon ringed by a glowing, spinning accretion disc, warped by a screen-space **gravitational-lensing** pass that bends the surrounding light and lights a photon ring) — ringed when large), the
+Either opens an interactive Three.js "universe" of the crawl in a new browser tab: one planet per page (sized by page weight, surfaced by information richness, coloured by crawl status — **failed pages become realistic black holes** (a dark event horizon that emits no light — a screen-space **gravitational-lensing** pass bends the surrounding starlight and traces a thin photon ring, so it reads as a dark body rather than a light source; the scene's bloom lights the suns, the trajectory lines, and that ring, but never the black holes) — ringed when large), the
 seed page as a central sun, each page's children orbiting that page (a nested orrery) so busy pages
 fling their sub-pages out into their own separated clusters, and orbit-links to the page each was
 discovered from that shimmer with a lone **electron** drifting back and forth (random per-link

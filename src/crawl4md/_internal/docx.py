@@ -14,6 +14,11 @@ from urllib.parse import urlparse
 
 import httpx
 
+from crawl4md._internal.http_client import (
+    document_ssl_context,
+    merge_document_headers,
+    referer_for_url,
+)
 from crawl4md.config import CrawlResult
 
 __all__ = [
@@ -47,9 +52,10 @@ async def is_docx_response(
             content_type = response.headers.get("content-type", "")
             return content_type.lower().startswith(_DOCX_CONTENT_TYPE)
         async with http_client_cls(
-            headers=headers or {},
+            headers=merge_document_headers(headers, referer=referer_for_url(url)),
             timeout=_DOCX_DOWNLOAD_TIMEOUT,
             follow_redirects=True,
+            verify=document_ssl_context(),
         ) as fallback_client:
             response = await fallback_client.head(url)
             content_type = response.headers.get("content-type", "")
@@ -82,9 +88,10 @@ async def download_docx(
     try:
         if client is None:
             async with http_client_cls(
-                headers=headers or {},
+                headers=merge_document_headers(headers, referer=referer_for_url(url)),
                 timeout=_DOCX_DOWNLOAD_TIMEOUT,
                 follow_redirects=True,
+                verify=document_ssl_context(),
             ) as fallback_client:
                 response = await fallback_client.get(url)
                 response.raise_for_status()

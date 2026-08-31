@@ -532,6 +532,30 @@ def test_build_viewer_html_includes_black_hole_lensing() -> None:
     assert "updateLensUniforms" in html  # per-frame hole projection wired
 
 
+# Risk: a black hole must read as a dark body (a planet-like mass), not a light
+# source. It previously carried a bright additive accretion disc + glow sprite
+# whose bloom washed nearby planets orange; if that emitting disc were
+# reintroduced the wash returns. Verify the black hole emits no light while its
+# gravitational lensing (the ring) stays. Type: unit.
+def test_build_viewer_html_black_hole_is_dark_body() -> None:
+    html = build_viewer_html(
+        _jsonl(
+            {
+                "url": "https://x.com",
+                "discovered_from": None,
+                "page_size_kb": 5.0,
+                "status": "success",
+                "depth": 0,
+                "round_num": 1,
+            }
+        ),
+        {},
+    )
+    assert "makeAccretionDisk" not in html  # no emitting accretion disc
+    assert "accretionDisks" not in html  # no disc bookkeeping/animation
+    assert "blackHoleLensShader" in html  # gravitational lensing + photon ring kept
+
+
 # Risk: a crawled URL could contain "</script>"; injected verbatim it would break
 # out of the bootstrap script tag. Verify the data is escaped, not raw. Type: unit.
 def test_build_viewer_html_escapes_script_breakout() -> None:

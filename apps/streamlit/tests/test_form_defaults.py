@@ -7,6 +7,7 @@ from app_support.crawl.form_defaults import (
     DEFAULT_URLS,
     OUTPUT_EXTENSION_OPTIONS,
     default_form_values,
+    form_state_from_submitted,
 )
 from app_support.support import build_configs
 
@@ -53,3 +54,30 @@ def test_default_form_values_build_valid_configs() -> None:
     assert crawler_config.max_concurrent == DEFAULT_MAX_CONCURRENT
     assert page_config.output_extension == DEFAULT_OUTPUT_EXTENSION
     assert activity_log_size == DEFAULT_ACTIVITY_LOG_SIZE
+
+
+def test_form_state_from_submitted_keeps_user_values_and_drops_control_flags() -> None:
+    submitted = default_form_values() | {
+        "submitted": True,
+        "stop_submitted": False,
+        "urls": "https://user.example",
+        "limit": 42,
+        "extract_main_content": False,
+    }
+
+    persisted = form_state_from_submitted(submitted)
+
+    assert persisted.keys() == default_form_values().keys()
+    assert "submitted" not in persisted
+    assert "stop_submitted" not in persisted
+    assert persisted["urls"] == "https://user.example"
+    assert persisted["limit"] == 42
+    assert persisted["extract_main_content"] is False
+
+
+def test_form_state_from_submitted_fills_missing_fields_with_defaults() -> None:
+    persisted = form_state_from_submitted({"urls": "https://only-urls.example"})
+
+    assert persisted["urls"] == "https://only-urls.example"
+    assert persisted["output_extension"] == DEFAULT_OUTPUT_EXTENSION
+    assert persisted["activity_log_size"] == DEFAULT_ACTIVITY_LOG_SIZE

@@ -583,8 +583,7 @@ function createBody(node, isRoot) {
   planets.push({ node, mesh, selfSpeed: 0.12 + (hashString(node.id) % 100) / 320 });
 }
 
-// Soft radial-gradient glow reused by the sun's corona, the focus halo, and
-// black-hole halos.
+// Soft radial-gradient glow reused by the sun's corona and the focus halo.
 function makeGlowTexture() {
   const size = 256;
   const cv = document.createElement("canvas");
@@ -604,7 +603,6 @@ function makeGlowTexture() {
 }
 const GLOW_TEXTURE = makeGlowTexture();
 const coronas = []; // { sprite, baseR } — updated by zoom in animate()
-const accretionDisks = []; // { disk, speed } — black-hole discs spun in animate()
 
 function makeSun(node) {
   const r = SUN_R + clamp01(Number(node.size_scale) || 0) * 1.6;
@@ -674,30 +672,16 @@ function makePlanet(node) {
   return mesh;
 }
 
-// Failed pages collapse into black holes: a pure-black event horizon ringed by a
-// tilted, glowing accretion disc (spun in animate()) plus a faint gravitational
-// halo so the dark core still reads against the starfield.
+// Failed pages collapse into black holes: a pure-black event horizon that emits
+// no light of its own. The screen-space lensing pass warps the starfield around
+// it and draws its photon ring, so it reads as a dark body — a planet-like mass,
+// not a light source.
 function makeBlackHole(node) {
   const r = MIN_PLANET_R + clamp01(Number(node.size_scale) || 0) * 0.9;
   const hole = new THREE.Mesh(
     new THREE.SphereGeometry(r, 28, 28),
     new THREE.MeshBasicMaterial({ color: 0x000000 }),
   );
-  const disk = makeAccretionDisk(r);
-  hole.add(disk);
-  accretionDisks.push({ disk, speed: 0.35 + (hashString(node.id) % 100) / 260 });
-  const glow = new THREE.Sprite(
-    new THREE.SpriteMaterial({
-      map: GLOW_TEXTURE,
-      color: 0xff7a2a,
-      blending: THREE.AdditiveBlending,
-      transparent: true,
-      depthWrite: false,
-      opacity: 0.28,
-    }),
-  );
-  glow.scale.setScalar(r * 3.2);
-  hole.add(glow);
   blackHoles.push({ mesh: hole, radius: r });
   return hole;
 }
@@ -732,37 +716,8 @@ function makeSaturnRingTexture() {
 }
 const SATURN_RING_TEXTURE = makeSaturnRingTexture();
 
-// A black hole's accretion disc: matter super-heated from a white-hot inner edge
-// out to a cooler crimson rim, faded at both edges. Mapped radially by
-// makeAccretionDisk so the gradient follows radius, additive so bloom lights it.
-function makeAccretionDiskTexture() {
-  const w = 512;
-  const h = 8;
-  const cv = document.createElement("canvas");
-  cv.width = w;
-  cv.height = h;
-  const ctx = cv.getContext("2d");
-  ctx.clearRect(0, 0, w, h);
-  const rand = mulberry32(0x9e3);
-  for (let x = 0; x < w; x++) {
-    const tt = x / (w - 1); // 0 = inner (hot), 1 = outer (cool)
-    let a = (1 - tt) ** 1.5;
-    a *= 0.8 + 0.2 * (0.5 + 0.5 * Math.sin(tt * 60)) + 0.06 * rand();
-    a *= Math.min(smooth01(tt, 0, 0.04), smooth01(1 - tt, 0, 0.22)); // fade edges
-    const gg = Math.floor(THREE.MathUtils.lerp(238, 74, tt));
-    const bb = Math.floor(THREE.MathUtils.lerp(205, 30, tt) * (1 - 0.55 * tt));
-    ctx.fillStyle = `rgba(255,${gg},${Math.max(0, bb)},${clamp01(a)})`;
-    ctx.fillRect(x, 0, 1, h);
-  }
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-const ACCRETION_TEXTURE = makeAccretionDiskTexture();
-
 // A flat ring whose UVs are remapped radially (u = 0 at the inner edge → 1 at the
-// outer) so a 1-D gradient texture's bands follow the radius. Shared by the
-// Saturn ring and the black hole's accretion disc.
+// outer) so a 1-D gradient texture's bands follow the radius. Used by the Saturn ring.
 function radialRingGeometry(inner, outer, segments) {
   const geo = new THREE.RingGeometry(inner, outer, segments, 4);
   const pos = geo.attributes.position;
@@ -773,25 +728,6 @@ function radialRingGeometry(inner, outer, segments) {
   }
   uv.needsUpdate = true;
   return geo;
-}
-
-// Tilted disc ring around the event horizon; the radial gradient runs hot→cool
-// from the inner edge outward, additive so bloom lights the inner rim.
-function makeAccretionDisk(planetR) {
-  const disk = new THREE.Mesh(
-    radialRingGeometry(planetR * 1.35, planetR * 3.0, 96),
-    new THREE.MeshBasicMaterial({
-      map: ACCRETION_TEXTURE,
-      transparent: true,
-      opacity: 0.95,
-      side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    }),
-  );
-  disk.rotation.x = Math.PI / 2 - 0.32; // tilt the disc toward the camera
-  disk.rotation.z = 0.18;
-  return disk;
 }
 
 function makeRing(planetR) {
@@ -1297,7 +1233,6 @@ function animate() {
   for (const p of planets) {
     p.mesh.rotation.y += p.selfSpeed * dt * idleFactor;
   }
-  for (const d of accretionDisks) d.disk.rotateZ(d.speed * dt);
   starfield.rotation.y += dt * 0.005 * idleFactor;
   const zoom = THREE.MathUtils.clamp(
     (camera.position.length() - SUN_NEAR) / (SUN_FAR - SUN_NEAR),

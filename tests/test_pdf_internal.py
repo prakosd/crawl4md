@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ssl
 import warnings
 from unittest.mock import AsyncMock, MagicMock
 
@@ -9,6 +10,27 @@ import httpx
 import pytest
 
 from crawl4md._internal.pdf import download_pdf, is_pdf_response, is_pdf_url, pdf_to_markdown
+
+
+class _RecordingClient:
+    """Fake httpx client that records its constructor kwargs for the fallback path."""
+
+    last_kwargs: dict = {}
+
+    def __init__(self, **kwargs: object) -> None:
+        type(self).last_kwargs = kwargs
+
+    async def __aenter__(self) -> _RecordingClient:
+        return self
+
+    async def __aexit__(self, *exc: object) -> bool:
+        return False
+
+    async def get(self, url: str):  # noqa: ANN201 - test double
+        response = MagicMock()
+        response.content = b"pdf-bytes"
+        response.raise_for_status = MagicMock()
+        return response
 
 
 def test_is_pdf_url_uses_path_extension() -> None:
@@ -27,6 +49,25 @@ async def test_is_pdf_response_uses_provided_client() -> None:
 
     assert result is True
     client.head.assert_awaited_once_with("https://example.com/report")
+
+
+@pytest.mark.asyncio
+async def test_download_pdf_fallback_uses_browser_headers_and_os_trust() -> None:
+    result, _ = await download_pdf(
+        "https://host.example/a/report.pdf",
+        headers={},
+        ocr_languages=[],
+        ocr_warned=False,
+        open_pdf=MagicMock(return_value=MagicMock()),
+        to_markdown=MagicMock(return_value="# R"),
+        http_client_cls=_RecordingClient,
+    )
+
+    assert result.success is True
+    kwargs = _RecordingClient.last_kwargs
+    assert "Mozilla/" in kwargs["headers"]["User-Agent"]  # real browser agent
+    assert kwargs["headers"]["Referer"] == "https://host.example/"  # same-origin
+    assert isinstance(kwargs["verify"], ssl.SSLContext)  # OS trust store, not certifi
 
 
 @pytest.mark.asyncio

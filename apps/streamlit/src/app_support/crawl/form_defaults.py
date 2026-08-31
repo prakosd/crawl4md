@@ -53,3 +53,14 @@ def default_form_values() -> dict[str, Any]:
         "output_extension": DEFAULT_OUTPUT_EXTENSION,
         "activity_log_size": DEFAULT_ACTIVITY_LOG_SIZE,
     }
+
+
+def form_state_from_submitted(values: dict[str, Any]) -> dict[str, Any]:
+    """Return the persistable field values from a submitted crawl form.
+
+    Keeps only the keys of :func:`default_form_values` (dropping control flags
+    such as ``submitted``) so the stored state can re-render the user's entries
+    in the disabled form during and after a crawl instead of snapping back to
+    defaults.
+    """
+    return {key: values.get(key, default) for key, default in default_form_values().items()}

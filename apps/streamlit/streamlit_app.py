@@ -55,7 +55,7 @@ from app_support.app_runtime import (
     _session_log_path,
     _session_root,
 )
-from app_support.crawl.form_defaults import default_form_values
+from app_support.crawl.form_defaults import default_form_values, form_state_from_submitted
 from app_support.dialog_ui import render_confirm_dialog
 from app_support.downloads_ui import _render_downloads, _render_ready_result_panel
 from app_support.focus import focus_widget
@@ -1305,7 +1305,6 @@ def _drain_job_events(job: CrawlJob | None) -> bool:
                 st.session_state.last_elapsed = str(elapsed).split(".")[0]
             st.session_state.started_at = None
             st.session_state.job = None
-            st.session_state.form_defaults = default_form_values()
     return state_changed
 
 
@@ -1409,6 +1408,9 @@ def _start_job(values: dict[str, Any]) -> None:
     st.session_state.active_output_dir = ""
     st.session_state.activity_log_size = activity_log_size
     st.session_state.activity_log_latest_line = None
+    # Keep the user's entries in the disabled form during the crawl and after it
+    # finishes, instead of snapping back to defaults when the expander collapses.
+    st.session_state.form_defaults = form_state_from_submitted(values)
     st.rerun()
 
 

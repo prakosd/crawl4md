@@ -84,13 +84,18 @@ Every library is an opt-in extra so each install stays lightweight:
 
 | Extra | Adds | Used for |
 |---|---|---|
-| `crawl` | `crawl4ai`, `trafilatura`, `markdownify`, `beautifulsoup4`, `mdformat`, `mdformat-gfm`, `nest-asyncio`, `httpx`, `pydantic`, `pymupdf4llm` | crawling + Markdown extraction (Step 1) |
+| `crawl` | `crawl4ai`, `trafilatura`, `markdownify`, `beautifulsoup4`, `mdformat`, `mdformat-gfm`, `nest-asyncio`, `httpx`, `truststore`, `pydantic`, `pymupdf4llm` (pulls `pymupdf`), `mammoth` | crawling + Markdown extraction, incl. PDF/DOCX (Step 1) |
 | `vector` | `langchain-chroma` (pulls `chromadb`), `langchain-text-splitters`, `langchain-core`, `pydantic` | chunking + vector store (Step 2) |
 | `bedrock` | `langchain-aws` (pulls `boto3`) | Amazon Titan embeddings **and** Bedrock chat models |
 | `openai` | `langchain-openai` (pulls `openai`) | OpenAI embeddings **and** chat models |
 | `rag` | `langchain` (umbrella), `langchain-core`, `pydantic` | retrieval + QA + conversational RAG (Steps 3-5) |
 | `all` | `crawl` + `vector` + `bedrock` + `openai` + `rag` | the full playground |
 | `dev` | `pytest`, `pytest-asyncio`, `pytest-cov`, `ruff`, `ipykernel` | tests, lint, notebook kernel |
+
+The extras are **audited to stay atomic**: every package listed above is imported by
+the component it belongs to (no unused dependencies), and each feature's libraries
+live only in its own extra — so the base install stays dependency-free and you never
+pull a library a component doesn't use.
 
 Cloud credentials are read from the environment. Copy
 [`.env.example`](../.env.example) to `.env` (git-ignored) and set `AWS_*` /

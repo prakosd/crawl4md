@@ -167,10 +167,17 @@ git-ignored.
 | `include_only_paths` | `list[str]` | `[]` | Regex patterns for URLs to keep (skip everything else) |
 | `delay` | `float` | `0` | Seconds to space page-fetch starts — paces your crawl to avoid triggering bot detection (round 1: jitter 0.1x–1.0x; retries: jitter 0.3x–3.0x). WAF back-off (3–15 s) always applies on block detection. |
 | `stealth` | `bool` | `True` | Enable bot-detection avoidance (random UA, stealth flags, full-page scan) |
-| `headers` | `dict[str, str]` | `{}` | Custom HTTP headers passed to the browser |
+| `headers` | `dict[str, str]` | `{}` | Custom HTTP headers passed to the browser; they also override the browser-like defaults sent on direct PDF/DOCX downloads (see note below) |
 | `max_retries` | `int` | `2` | Retry rounds for WAF-blocked pages (minimum 2) |
 | `flush_interval` | `int` | `10` | Write generated files to disk every N pages |
 | `proxies` | `list[str]` | `[]` | Proxy URLs tried in order (direct first) when blocked; feeds Crawl4AI's `proxy_config` on the first retry round only. Set via the `CRAWL_PROXIES` secret in the app — never logged (`repr=False`). |
+
+> **Direct document downloads (PDF/DOCX).** These are fetched with `httpx`, not the browser,
+> so the crawler sends a real desktop-browser `User-Agent` + same-origin `Referer` and
+> validates TLS against the **OS certificate store** (via `truststore`) — the same trust the
+> browser and `pip` use, so downloads succeed behind a corporate TLS-intercepting proxy
+> (httpx's default `certifi` bundle would raise `CERTIFICATE_VERIFY_FAILED`). Set `headers`
+> to override any of these defaults (e.g. a custom `User-Agent`).
 
 ## PageConfig
 

@@ -149,8 +149,10 @@ class TestIsPdfResponse:
                 "https://example.com/report", {"Authorization": "Bearer x"}
             )
         mock_cls.assert_called_once()
-        call_kwargs = mock_cls.call_args
-        assert call_kwargs.kwargs["headers"] == {"Authorization": "Bearer x"}
+        headers = mock_cls.call_args.kwargs["headers"]
+        assert headers["Authorization"] == "Bearer x"  # config header forwarded
+        assert "Mozilla/" in headers["User-Agent"]  # merged with browser defaults
+        assert headers["Referer"] == "https://example.com/"  # same-origin
 
     @pytest.mark.asyncio
     async def test_uses_provided_client(self):

@@ -78,6 +78,11 @@ from crawl4md._internal.final_output import (
     round_dir_name,
     round_num_from_dir,
 )
+from crawl4md._internal.http_client import (
+    document_ssl_context,
+    merge_document_headers,
+    referer_for_url,
+)
 from crawl4md._internal.network_usage import NetworkUsageRecorder
 from crawl4md._internal.pdf import (
     _OCR_UNAVAILABLE_WARNING as _PDF_OCR_UNAVAILABLE_WARNING,
@@ -743,7 +748,12 @@ class SiteCrawler:
         async_web_crawler_cls, browser_config_cls, crawler_run_config_cls = _load_crawl4ai_classes()
         browser_cfg = browser_config_cls(**browser_kwargs)
         run_cfg = self._build_run_config(crawler_run_config_cls)
-        pdf_headers = dict(self.config.headers) if self.config.headers else {}
+        # Direct document (PDF/DOCX) downloads use a real browser User-Agent and a
+        # same-origin Referer, and trust the OS certificate store (via truststore) so
+        # a corporate TLS-intercepting proxy verifies just as the browser round does;
+        # CrawlerConfig.headers override these defaults.
+        seed_referer = referer_for_url(self.config.urls[0]) if self.config.urls else None
+        pdf_headers = merge_document_headers(self.config.headers, referer=seed_referer)
 
         # Round 1 uses the standard stealth browser; retry rounds always escalate to
         # the undetected browser. The rounds run in separate browser instances, so
@@ -755,6 +765,7 @@ class SiteCrawler:
                 headers=pdf_headers,
                 timeout=_PDF_DOWNLOAD_TIMEOUT,
                 follow_redirects=True,
+                verify=document_ssl_context(),
             ) as pdf_client:
                 self._pdf_client = pdf_client
                 # --- Round 1: full crawl with link discovery (standard browser) ---
