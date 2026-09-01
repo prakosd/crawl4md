@@ -67,6 +67,15 @@ crawl/index/RAG config models.
 | `RAG_LLM_SIZE_BANDS` | `XS,Small` | Size bands shown in the RAG model picker (comma-separated: XS, Small, Medium, Large, XL, Frontier); models outside these bands are hidden. Per-model metadata + pricing live in `apps/streamlit/config/model_pricing.yaml` |
 | `SEMANTIC_SEARCH_TOP_N` | `5` | Ranked matches shown on the Search page |
 | `SEMANTIC_SEARCH_DEFAULT_TAB` | `raw` | Default open tab on each result card (`raw` or `preview`) |
+| `CONV_RAG_RERANKER` | `local` | Step 5 default re-ranking: `off`, `local` (on-device cross-encoder, needs the `[rerank]` extra + torch), or `llm` (reuses the auxiliary model). Users can switch per session; set `llm`/`off` on memory-limited hosts (e.g. Streamlit Cloud) so the local model is never loaded |
+| `CONV_RAG_RERANK_TOP_N` | `5` | Passages kept after re-ranking as answer context (Step 5) |
+| `CONV_RAG_AUX_MODELS` | `apac.amazon.nova-micro-v1:0,…` | Small helper models offered as the Step 5 **Auxiliary model** (decomposition / state / follow-ups / LLM re-rank) |
+| `CONV_RAG_DEFAULT_AUX_MODEL` | `apac.amazon.nova-micro-v1:0` | Auxiliary model pre-selected on Step 5 |
+| `CONV_RAG_DECOMPOSITION_ENABLED` | `true` | Whether query decomposition starts on (users can toggle it) |
+| `CONV_RAG_FOLLOWUPS_ENABLED` | `true` | Whether follow-up suggestions start on (users can toggle them) |
+| `CONV_RAG_FOLLOWUP_MIN_SCORE` | `0.60` | A follow-up is kept outright at/above this similarity |
+| `CONV_RAG_FOLLOWUP_DROP_SCORE` | `0.40` | A follow-up is dropped outright at/below this similarity (in between → the model checks) |
+| `CONV_RAG_FOLLOWUP_SHOW_COUNT` | `3` | Validated follow-up buttons shown on Step 5 |
 | `SESSION_RETENTION_DAYS` | `7` | Days an inactive browser session's files are kept before startup cleanup deletes them (loading or crawling resets the clock) |
 | `UI_DOWNLOAD_LIMIT_MB` | `500` | Largest file or folder-zip served as a download |
 | `UI_PREVIEW_LIMIT_KB` | `256` | Largest inline text preview |

@@ -39,3 +39,54 @@ def test_no_context_is_a_warning() -> None:
 
     assert message.code == messages.CODE_NO_CONTEXT
     assert message.severity == SEVERITY_WARNING
+
+
+def test_plan_skipped_offline_is_a_warning() -> None:
+    message = messages.plan_skipped_offline()
+
+    assert message.code == messages.CODE_PLAN_SKIPPED_OFFLINE
+    assert message.severity == SEVERITY_WARNING
+
+
+def test_plan_unparsable_is_a_warning() -> None:
+    message = messages.plan_unparsable()
+
+    assert message.code == messages.CODE_PLAN_UNPARSABLE
+    assert message.severity == SEVERITY_WARNING
+
+
+def test_aux_model_fallback_carries_detail() -> None:
+    message = messages.aux_model_fallback("no small cloud model")
+
+    assert message.code == messages.CODE_AUX_MODEL_FALLBACK
+    assert message.severity == SEVERITY_WARNING
+    assert message.params["detail"] == "no small cloud model"
+
+
+def test_rerank_unavailable_carries_mode() -> None:
+    message = messages.rerank_unavailable("local", "sentence-transformers not installed")
+
+    assert message.code == messages.CODE_RERANK_UNAVAILABLE
+    assert message.severity == SEVERITY_WARNING
+    assert message.params["mode"] == "local"
+
+
+def test_followups_none_valid_is_a_warning() -> None:
+    message = messages.followups_none_valid()
+
+    assert message.code == messages.CODE_FOLLOWUPS_NONE_VALID
+    assert message.severity == SEVERITY_WARNING
+
+
+def test_followups_generation_failed_is_a_warning() -> None:
+    message = messages.followups_generation_failed("boom")
+
+    assert message.code == messages.CODE_FOLLOWUPS_GENERATION_FAILED
+    assert message.severity == SEVERITY_WARNING
+
+
+def test_retrieval_partial_failure_is_a_warning() -> None:
+    message = messages.retrieval_partial_failure("q2 failed")
+
+    assert message.code == messages.CODE_RETRIEVAL_PARTIAL_FAILURE
+    assert message.severity == SEVERITY_WARNING

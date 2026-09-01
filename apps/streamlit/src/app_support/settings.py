@@ -145,6 +145,28 @@ class Settings(BaseSettings):
     # Default open tab for each Semantic Search result card: "raw" or "preview".
     semantic_search_default_tab: str
 
+    # ── Step 5 · Conversational RAG (rag_engine) ────────────────────────
+    # Default re-ranking strategy: "off", "local" (on-device cross-encoder), or
+    # "llm" (reuses the auxiliary model). Users can switch it per session; set
+    # "llm"/"off" on memory-limited hosts to avoid loading the local model.
+    conv_rag_reranker: str
+    # Passages kept (after re-ranking) as context for the answer.
+    conv_rag_rerank_top_n: int
+    # Small helper models offered as the Step 5 "Auxiliary model" (comma-separated
+    # rag_engine catalog ids) for decomposition/state/follow-ups/LLM re-rank.
+    conv_rag_aux_models: str
+    # The auxiliary model pre-selected on Step 5.
+    conv_rag_default_aux_model: str
+    # Whether query decomposition / follow-up suggestions start on (toggleable).
+    conv_rag_decomposition_enabled: bool
+    conv_rag_followups_enabled: bool
+    # Follow-up validation thresholds (0-1 similarity): at/above keep, at/below
+    # drop, in between the model decides. Keep drop <= min.
+    conv_rag_followup_min_score: float
+    conv_rag_followup_drop_score: float
+    # Number of validated follow-up buttons shown.
+    conv_rag_followup_show_count: int
+
     # ── Session lifecycle ────────────────────────────────────────────────────
     # Days an inactive browser session's files are kept before the startup
     # cleanup deletes them. Loading or crawling in a session resets its clock.

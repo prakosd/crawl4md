@@ -121,9 +121,18 @@ flowchart TD
   dialog, and *Send* streams the answer with `stream_prompt` into an **Answer** panel
   inside the prompt form and reports token usage + latency. `answer_question` remains a
   one-call convenience for other UIs.
-- **Step 5 (conversational)** runs `chat_answer`, which first rewrites the follow-up
-  into a standalone query via `condense_question` (history-aware), then retrieves and
-  answers with the recent history in the prompt.
+- **Step 5 (conversational)** offers two entry points. `chat_answer` is the simple
+  history-aware flow (rewrite the follow-up via `condense_question`, then retrieve and
+  answer). The Streamlit page uses the advanced `conversational_answer` pipeline:
+  `plan_queries` decomposes the question into standalone sub-questions (small auxiliary
+  model from `resolve_auxiliary_model`), `retrieve_multi` searches each in parallel and
+  de-dupes, `rerank_chunks` re-orders them (off / local cross-encoder / LLM),
+  the answer is generated, then `suggest_followups` + `validate_followups` propose only
+  corpus-answerable follow-ups and `update_state` rolls conversation memory forward. It
+  returns a `ConversationalAnswer` (answer + `QueryPlan` + sources + `ValidatedFollowup`s
+  + next `ConversationState` + per-stage `timings`) that the UI renders as a metadata
+  strip and a per-turn inspection panel. Every stage degrades safely (offline model,
+  missing re-rank dependency, unparsable output) with a recorded warning, never an error.
 
 When a cloud chat model is unavailable, `resolve_chat_model` falls back to an offline
 echo model (which repeats the question) and records a warning, so the workflow runs

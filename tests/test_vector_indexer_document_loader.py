@@ -53,3 +53,27 @@ def test_zip_without_text_members_warns(tmp_path: Path) -> None:
     assert result.documents == []
     assert any(warning.code == messages.CODE_ARCHIVE_EMPTY for warning in result.warnings)
     assert any("No .md or .txt" in str(warning) for warning in result.warnings)
+
+
+def test_unreadable_text_file_is_skipped_with_warning(tmp_path: Path) -> None:
+    # A directory whose name ends in ".md" dispatches to the text loader, where
+    # read_text raises OSError (IsADirectoryError) — the unreadable-file branch.
+    fake = tmp_path / "looks_like.md"
+    fake.mkdir()
+
+    result = load_documents([fake])
+
+    assert result.documents == []
+    assert result.skipped_file_count == 1
+    assert any(warning.code == messages.CODE_FILE_UNREADABLE for warning in result.warnings)
+
+
+def test_corrupt_zip_is_skipped_with_warning(tmp_path: Path) -> None:
+    zip_path = tmp_path / "bad.zip"
+    zip_path.write_bytes(b"not a real zip archive")
+
+    result = load_documents([zip_path])
+
+    assert result.documents == []
+    assert result.skipped_file_count == 1
+    assert any(warning.code == messages.CODE_ARCHIVE_UNREADABLE for warning in result.warnings)

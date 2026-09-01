@@ -16,6 +16,7 @@ from typing import Any
 
 __all__ = [
     "BASIC_RAG_QA_RESULT_KEYS",
+    "CONVERSATIONAL_RAG_RESULT_KEYS",
     "SEMANTIC_SEARCH_RESULT_KEYS",
     "TRANSIENT_RESULT_KEYS",
     "clear_transient_result_state",
@@ -41,9 +42,18 @@ BASIC_RAG_QA_RESULT_KEYS: tuple[str, ...] = (
     "basic_rag_qa_stats",
 )
 
+# Step 5: the conversation turns, rolling state, follow-up cache, and pending click.
+CONVERSATIONAL_RAG_RESULT_KEYS: tuple[str, ...] = (
+    "conversational_rag_turns",
+    "conversational_rag_state",
+    "conversational_rag_followup_cache",
+    "conversational_rag_pending",
+)
+
 TRANSIENT_RESULT_KEYS: tuple[str, ...] = (
     *SEMANTIC_SEARCH_RESULT_KEYS,
     *BASIC_RAG_QA_RESULT_KEYS,
+    *CONVERSATIONAL_RAG_RESULT_KEYS,
 )
 
 

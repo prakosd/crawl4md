@@ -18,7 +18,7 @@
   },
   "remoteUser": "vscode",
   // Install Tesseract OCR (eng + msa), then pip install + Playwright + crawl4ai-setup.
-  // `.[dev,all]` pulls every library + backend (crawl, vector, bedrock, openai, rag);
+  // `.[dev,all]` pulls every library + backend (crawl, vector, bedrock, openai, rag, rerank);
   // the vector/bedrock/openai/rag extras install the LangChain packages
   // (langchain-chroma, langchain-aws, langchain-openai, langchain).
   // The yarn apt source is removed first — its GPG key is expired in this base image.

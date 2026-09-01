@@ -36,7 +36,7 @@ STRINGS_EN: Strings = {
     "NAV_SEMANTIC_SEARCH": "3. Semantic Search",
     "NAV_BASIC_RAG_QA": "4. Basic RAG Q&A",
     "NAV_CONVERSATIONAL_RAG": "5. Conversational RAG",
-    "PAGE_VECTOR_INDEX_TITLE": ":material/settings: Step 2 - Build Vector Index",
+    "PAGE_VECTOR_INDEX_TITLE": ":material/database: Step 2 - Build Vector Index",
     "PAGE_VECTOR_INDEX_SUBTITLE": (
         "Turn crawled pages and your own documents into a searchable vector database "
         "that powers retrieval-augmented generation."
@@ -53,9 +53,10 @@ STRINGS_EN: Strings = {
     ),
     "PAGE_CONVERSATIONAL_RAG_TITLE": ":material/forum: Step 5 - Conversational RAG",
     "PAGE_CONVERSATIONAL_RAG_SUBTITLE": (
-        "Have a multi-turn conversation with your documents. The app automatically rewrites your "
-        "follow-up questions using conversation context, retrieves fresh knowledge for each turn, "
-        "and maintains history throughout the chat."
+        "Have a multi-turn conversation with your documents. Each turn decomposes multi-part "
+        "questions, retrieves and re-ranks the most relevant passages, updates a running "
+        "conversation state, and suggests validated follow-up questions. Turn on Inspect mode "
+        "to see every stage."
     ),
     "PLACEHOLDER_SECTION_HEADER": "Step workspace",
     "PLACEHOLDER_SECTION_CAPTION": (
@@ -76,8 +77,9 @@ STRINGS_EN: Strings = {
         "call the selected LLM, then display the answer together with the context sources."
     ),
     "PLACEHOLDER_CONVERSATIONAL_RAG": (
-        "Use a chat-style interface that can rewrite the retrieval query from conversation "
-        "context, include recent message history, and grow into memory-aware RAG workflows."
+        "A chat interface that decomposes multi-part questions, retrieves and re-ranks passages "
+        "per sub-question, maintains conversation state, and suggests validated follow-ups — "
+        "with an inspect mode for each stage."
     ),
     # ── RAG pages (Steps 3-5) ──────────────────────────────────
     "RAG_NO_INDEX_HINT": "No vector index found yet. Build one in Step 2 first.",
@@ -262,12 +264,73 @@ STRINGS_EN: Strings = {
     "BASIC_QA_HISTORY_TIME_BREAKDOWN": "{search}s + {answer}s = {total}s",
     "CHAT_SECTION_HEADER": "💬 Chat with your documents",
     "CHAT_SECTION_CAPTION": (
-        "Ask follow-up questions; the app rewrites them using the conversation and "
-        "retrieves fresh context each turn."
+        "Each turn decomposes your question, retrieves and re-ranks passages, updates "
+        "conversation state, and proposes follow-ups it can answer."
     ),
     "CHAT_INPUT_PLACEHOLDER": "Ask a question…",
     "CHAT_CLEAR_BUTTON": "Clear conversation",
     "CHAT_EMPTY_HINT": "Start the conversation by asking a question below.",
+    # ── Conversational RAG controls + inspection (Step 5) ─────────────────
+    "CONV_ADVANCED_LABEL": "Advanced options",
+    "CONV_RERANKER_LABEL": "Re-ranking",
+    "CONV_RERANKER_HELP": (
+        "Re-order retrieved passages by relevance. Local uses an on-device "
+        "cross-encoder; LLM uses the auxiliary model; Off keeps search order."
+    ),
+    "CONV_RERANKER_OFF": "Off",
+    "CONV_RERANKER_LOCAL": "Local",
+    "CONV_RERANKER_LLM": "LLM",
+    "CONV_AUX_MODEL_LABEL": "Auxiliary model",
+    "CONV_AUX_MODEL_HELP": (
+        "Small, fast model used for query decomposition, conversation state, "
+        "follow-up suggestions, and LLM re-ranking."
+    ),
+    "CONV_DECOMPOSITION_LABEL": "Query decomposition",
+    "CONV_DECOMPOSITION_HELP": "Split multi-part questions into separate searches.",
+    "CONV_FOLLOWUPS_LABEL": "Follow-up suggestions",
+    "CONV_FOLLOWUPS_HELP": "Suggest follow-up questions the documents can answer.",
+    "CONV_INSPECT_LABEL": "Inspect mode",
+    "CONV_INSPECT_HELP": "Show how each answer was built.",
+    "CONV_THRESHOLD_LABEL": "Follow-up thresholds",
+    "CONV_THRESHOLD_HELP": (
+        "A follow-up is kept above the upper mark, dropped below the lower mark, "
+        "and checked by the model in between."
+    ),
+    "CONV_THRESHOLD_CAPTION": (
+        ":red-badge[Drop ≤ {drop}] :orange-badge[Check] :green-badge[Keep ≥ {keep}]"
+    ),
+    "CONV_INSPECT_EXPANDER": "🔎 Inspect this turn",
+    "CONV_TAB_DECOMPOSITION": "Decomposition",
+    "CONV_TAB_RETRIEVAL": "Retrieval",
+    "CONV_TAB_RERANKING": "Re-ranking",
+    "CONV_TAB_STATE": "Conversation state",
+    "CONV_TAB_FOLLOWUPS": "Follow-ups",
+    "CONV_INSPECT_QUESTION": "Your question",
+    "CONV_INSPECT_SUBQUESTIONS": "Sub-questions",
+    "CONV_INSPECT_DEGRADED": "Planning was skipped or fell back to the original question.",
+    "CONV_INSPECT_RERANKER_USED": "Re-ranker: {reranker}",
+    "CONV_INSPECT_STATE_SUMMARY": "Summary",
+    "CONV_INSPECT_STATE_ENTITIES": "Entities",
+    "CONV_INSPECT_STATE_THREADS": "Open threads",
+    "CONV_INSPECT_STATE_RECENT": "Recent questions",
+    "CONV_INSPECT_STATE_EMPTY": "No conversation memory yet.",
+    "CONV_INSPECT_FOLLOWUPS_NONE": "No follow-up suggestions for this turn.",
+    "CONV_META_TIMINGS": "Timings (s)",
+    "CONV_META_PLAN": "Plan",
+    "CONV_META_RETRIEVE": "Retrieval",
+    "CONV_META_RERANK": "Re-ranking",
+    "CONV_META_ANSWER": "Answer",
+    "CONV_META_FOLLOWUPS": "Follow-ups",
+    "CONV_META_STATE": "State",
+    "CONV_META_ANSWER_MODEL": "Answer model",
+    "CONV_META_AUX_MODEL": "Auxiliary model",
+    "CONV_META_RERANKER": "Re-ranker",
+    "CONV_FOLLOWUPS_CAPTION": "💡 Suggested follow-ups",
+    "CONV_HISTORY_PANEL_TITLE": "Conversation history",
+    "CONV_HISTORY_EMPTY": "Saved turns appear here.",
+    "CONV_HISTORY_PIN": "Pin",
+    "CONV_HISTORY_UNPIN": "Unpin",
+    "CONV_HISTORY_REPLAY": "Ask again",
     # ── Form ──────────────────────────────────────────────────────────────
     "FORM_SUBHEADER": "⚙️ Set up your crawl",
     "FORM_CAPTION": (

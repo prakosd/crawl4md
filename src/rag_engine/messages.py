@@ -11,25 +11,39 @@ from __future__ import annotations
 from artifact_store import SEVERITY_ERROR, SEVERITY_WARNING, LibraryMessage
 
 __all__ = [
+    "CODE_AUX_MODEL_FALLBACK",
     "CODE_EMBEDDING_UNAVAILABLE",
     "CODE_EMPTY_QUESTION",
+    "CODE_FOLLOWUPS_GENERATION_FAILED",
+    "CODE_FOLLOWUPS_NONE_VALID",
     "CODE_GENERATION_FAILED",
     "CODE_INDEX_NOT_FOUND",
     "CODE_INDEX_UNREADABLE",
     "CODE_MODEL_FALLBACK_ECHO",
     "CODE_MODEL_UNAVAILABLE",
     "CODE_NO_CONTEXT",
+    "CODE_PLAN_SKIPPED_OFFLINE",
+    "CODE_PLAN_UNPARSABLE",
+    "CODE_RERANK_UNAVAILABLE",
     "CODE_RETRIEVAL_FAILED",
+    "CODE_RETRIEVAL_PARTIAL_FAILURE",
     "CODE_SSL_CERTIFICATE",
+    "aux_model_fallback",
     "classify_generation_failure",
     "embedding_unavailable",
     "empty_question",
+    "followups_generation_failed",
+    "followups_none_valid",
     "index_not_found",
     "index_unreadable",
     "model_fallback_echo",
     "model_unavailable",
     "no_context",
+    "plan_skipped_offline",
+    "plan_unparsable",
+    "rerank_unavailable",
     "retrieval_failed",
+    "retrieval_partial_failure",
 ]
 
 CODE_INDEX_NOT_FOUND = "rag.index_not_found"
@@ -42,6 +56,13 @@ CODE_GENERATION_FAILED = "rag.generation_failed"
 CODE_NO_CONTEXT = "rag.no_context"
 CODE_EMPTY_QUESTION = "rag.empty_question"
 CODE_SSL_CERTIFICATE = "rag.ssl_certificate"
+CODE_PLAN_SKIPPED_OFFLINE = "rag.chat.plan_skipped_offline"
+CODE_PLAN_UNPARSABLE = "rag.chat.plan_unparsable"
+CODE_AUX_MODEL_FALLBACK = "rag.chat.aux_model_fallback"
+CODE_RERANK_UNAVAILABLE = "rag.rerank.unavailable"
+CODE_FOLLOWUPS_NONE_VALID = "rag.followups.none_valid"
+CODE_FOLLOWUPS_GENERATION_FAILED = "rag.followups.generation_failed"
+CODE_RETRIEVAL_PARTIAL_FAILURE = "rag.retrieval.partial_failure"
 
 # Substrings that mark a TLS/SSL certificate failure inside a backend exception.
 _SSL_ERROR_SIGNATURES = (
@@ -126,3 +147,60 @@ def classify_generation_failure(detail: str) -> LibraryMessage:
             detail=detail,
         )
     return _error(CODE_GENERATION_FAILED, f"Generating the answer failed: {detail}", detail=detail)
+
+
+def plan_skipped_offline() -> LibraryMessage:
+    return _warn(
+        CODE_PLAN_SKIPPED_OFFLINE,
+        "Query planning was skipped because the offline echo model was used; "
+        "the question was answered as a single query.",
+    )
+
+
+def plan_unparsable() -> LibraryMessage:
+    return _warn(
+        CODE_PLAN_UNPARSABLE,
+        "The planner returned an unreadable response; the question was treated as a single query.",
+    )
+
+
+def aux_model_fallback(detail: str) -> LibraryMessage:
+    return _warn(
+        CODE_AUX_MODEL_FALLBACK,
+        "No small auxiliary model was available for planning and follow-ups; "
+        f"using the main answer model instead: {detail}",
+        detail=detail,
+    )
+
+
+def rerank_unavailable(mode: str, detail: str) -> LibraryMessage:
+    return _warn(
+        CODE_RERANK_UNAVAILABLE,
+        f"Re-ranking ({mode}) is unavailable ({detail}); "
+        "results were kept in their original search order.",
+        mode=mode,
+        detail=detail,
+    )
+
+
+def followups_none_valid() -> LibraryMessage:
+    return _warn(
+        CODE_FOLLOWUPS_NONE_VALID,
+        "No follow-up suggestions passed validation for this answer.",
+    )
+
+
+def followups_generation_failed(detail: str) -> LibraryMessage:
+    return _warn(
+        CODE_FOLLOWUPS_GENERATION_FAILED,
+        f"Generating follow-up suggestions failed: {detail}",
+        detail=detail,
+    )
+
+
+def retrieval_partial_failure(detail: str) -> LibraryMessage:
+    return _warn(
+        CODE_RETRIEVAL_PARTIAL_FAILURE,
+        f"Retrieval failed for one or more sub-questions: {detail}",
+        detail=detail,
+    )

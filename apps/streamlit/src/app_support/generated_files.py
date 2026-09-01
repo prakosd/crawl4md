@@ -25,6 +25,7 @@ from artifact_store.archives import (
 )
 from artifact_store.naming import (
     BASIC_RAG_QA_FOLDER_PREFIX,
+    CONVERSATIONAL_RAG_FOLDER_PREFIX,
     SEARCH_FOLDER_PREFIX,
     VECTOR_FOLDER_PREFIX,
     folder_name,
@@ -41,6 +42,9 @@ from crawl4md.naming import (
 )
 
 from app_support.basic_rag_qa.basic_rag_qa_history import BASIC_QA_HISTORY_DIRNAME
+from app_support.conversational_rag.conversational_rag_history import (
+    CONVERSATIONAL_RAG_HISTORY_DIRNAME,
+)
 from app_support.semantic_search.search_history import SEARCH_HISTORY_DIRNAME
 from app_support.session_manager import ensure_within_root
 
@@ -49,10 +53,13 @@ _CRAWL_DIR_PREFIX = CRAWL_FOLDER_PREFIX
 _VECTOR_DIR_PREFIX = VECTOR_FOLDER_PREFIX
 _SEARCH_DIR_PREFIX = SEARCH_FOLDER_PREFIX
 _BASIC_RAG_QA_DIR_PREFIX = BASIC_RAG_QA_FOLDER_PREFIX
+_CONVERSATIONAL_RAG_DIR_PREFIX = CONVERSATIONAL_RAG_FOLDER_PREFIX
 # Fixed per-session history folders (not timestamped runs). They get the same
 # Export + Delete controls as run folders so a user can download or clear their
-# accumulated search / Q&A history straight from the download tree.
-_HISTORY_FOLDER_NAMES = frozenset({SEARCH_HISTORY_DIRNAME, BASIC_QA_HISTORY_DIRNAME})
+# accumulated search / Q&A / chat history straight from the download tree.
+_HISTORY_FOLDER_NAMES = frozenset(
+    {SEARCH_HISTORY_DIRNAME, BASIC_QA_HISTORY_DIRNAME, CONVERSATIONAL_RAG_HISTORY_DIRNAME}
+)
 # Material icons for download-tree folders, picked by artifact type so a crawl
 # run reads as exploration and a vector index as a database at a glance.
 _FOLDER_ICON_DEFAULT = ":material/folder_open:"
@@ -60,6 +67,7 @@ _FOLDER_ICON_CRAWL = ":material/travel_explore:"
 _FOLDER_ICON_VECTOR = ":material/database:"
 _FOLDER_ICON_SEARCH = ":material/search:"
 _FOLDER_ICON_BASIC_RAG_QA = ":material/question_answer:"
+_FOLDER_ICON_CONVERSATIONAL_RAG = ":material/forum:"
 _DEFAULT_DOWNLOAD_LIMIT_BYTES = 50 * 1024 * 1024
 _DEFAULT_PREVIEW_MAX_BYTES = 256 * 1024
 _BYTES_PER_KB = 1024
@@ -732,6 +740,8 @@ def download_folder_icon(folder_name: str) -> str:
         return _FOLDER_ICON_SEARCH
     if folder_name.startswith(_BASIC_RAG_QA_DIR_PREFIX):
         return _FOLDER_ICON_BASIC_RAG_QA
+    if folder_name.startswith(_CONVERSATIONAL_RAG_DIR_PREFIX):
+        return _FOLDER_ICON_CONVERSATIONAL_RAG
     return _FOLDER_ICON_DEFAULT
 
 

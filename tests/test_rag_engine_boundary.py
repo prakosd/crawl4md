@@ -16,6 +16,7 @@ _HEAVY_BACKENDS = (
     "langchain_openai",
     "langchain_chroma",
     "chromadb",
+    "sentence_transformers",
 )
 
 

@@ -211,10 +211,11 @@ class VectorIndexer:
         )
 
         def _store_batch(batch: list[Chunk], batch_ids: list[str]) -> None:
-            vectors = resolved.embeddings.embed_documents([chunk.text for chunk in batch])
+            texts = [chunk.text for chunk in batch]
+            vectors = resolved.embeddings.embed_documents(texts)
             with store_lock:
                 store.add_embeddings(
-                    texts=[chunk.text for chunk in batch],
+                    texts=texts,
                     embeddings=vectors,
                     metadatas=[chunk.metadata for chunk in batch],
                     ids=batch_ids,

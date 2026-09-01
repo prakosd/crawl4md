@@ -37,7 +37,7 @@ STRINGS_ID: Strings = {
     "NAV_SEMANTIC_SEARCH": "3. Semantic Search",
     "NAV_BASIC_RAG_QA": "4. RAG Q&A Sederhana",
     "NAV_CONVERSATIONAL_RAG": "5. Conversational RAG",
-    "PAGE_VECTOR_INDEX_TITLE": ":material/settings: Langkah 2 - Bangun Vector Index",
+    "PAGE_VECTOR_INDEX_TITLE": ":material/database: Langkah 2 - Bangun Vector Index",
     "PAGE_VECTOR_INDEX_SUBTITLE": (
         "Ubah halaman hasil crawl dan dokumen Anda sendiri menjadi vector database yang "
         "dapat dicari untuk retrieval-augmented generation."
@@ -54,9 +54,10 @@ STRINGS_ID: Strings = {
     ),
     "PAGE_CONVERSATIONAL_RAG_TITLE": ":material/forum: Langkah 5 - Conversational RAG",
     "PAGE_CONVERSATIONAL_RAG_SUBTITLE": (
-        "Adakan percakapan multi-giliran dengan dokumen Anda. Aplikasi secara otomatis menulis "
-        "ulang pertanyaan lanjutan menggunakan konteks percakapan, mengambil pengetahuan segar "
-        "untuk setiap giliran, dan mempertahankan riwayat selama chat."
+        "Adakan percakapan multi-giliran dengan dokumen Anda. Setiap giliran memecah pertanyaan "
+        "multi-bagian, mengambil dan memeringkat ulang bagian paling relevan, memperbarui state "
+        "percakapan yang berjalan, dan menyarankan pertanyaan lanjutan yang tervalidasi. Aktifkan "
+        "mode Inspeksi untuk melihat setiap tahap."
     ),
     "PLACEHOLDER_SECTION_HEADER": "Area kerja langkah",
     "PLACEHOLDER_SECTION_CAPTION": (
@@ -78,9 +79,9 @@ STRINGS_ID: Strings = {
         "panggil LLM yang dipilih, lalu tampilkan jawaban bersama sumber konteks."
     ),
     "PLACEHOLDER_CONVERSATIONAL_RAG": (
-        "Gunakan antarmuka chat yang dapat menulis ulang kueri retrieval dari konteks "
-        "percakapan, menyertakan riwayat pesan terbaru, dan berkembang menjadi alur RAG "
-        "dengan memory."
+        "Antarmuka chat yang memecah pertanyaan multi-bagian, mengambil dan memeringkat ulang "
+        "bagian per sub-pertanyaan, mempertahankan state percakapan, dan menyarankan pertanyaan "
+        "lanjutan tervalidasi — dengan mode inspeksi untuk setiap tahap."
     ),
     # ── RAG pages (Steps 3-5) ──────────────────────────────────
     "RAG_NO_INDEX_HINT": "Belum ada vector index. Bangun satu di Langkah 2 dulu.",
@@ -268,12 +269,73 @@ STRINGS_ID: Strings = {
     "BASIC_QA_HISTORY_TIME_BREAKDOWN": "{search}s + {answer}s = {total}s",
     "CHAT_SECTION_HEADER": "💬 Mengobrol dengan dokumen Anda",
     "CHAT_SECTION_CAPTION": (
-        "Ajukan pertanyaan lanjutan; aplikasi menulis ulang dengan konteks percakapan dan "
-        "mengambil konteks baru tiap giliran."
+        "Setiap giliran memecah pertanyaan Anda, mengambil dan memeringkat ulang bagian, "
+        "memperbarui state percakapan, dan mengusulkan pertanyaan lanjutan yang bisa dijawab."
     ),
     "CHAT_INPUT_PLACEHOLDER": "Ajukan pertanyaan…",
     "CHAT_CLEAR_BUTTON": "Hapus percakapan",
     "CHAT_EMPTY_HINT": "Mulai percakapan dengan mengajukan pertanyaan di bawah.",
+    # ── Conversational RAG controls + inspection (Step 5) ─────────────────
+    "CONV_ADVANCED_LABEL": "Opsi lanjutan",
+    "CONV_RERANKER_LABEL": "Pemeringkatan ulang",
+    "CONV_RERANKER_HELP": (
+        "Urutkan ulang bagian yang diambil berdasarkan relevansi. Local memakai "
+        "cross-encoder di perangkat; LLM memakai model bantu; Off memakai urutan pencarian."
+    ),
+    "CONV_RERANKER_OFF": "Off",
+    "CONV_RERANKER_LOCAL": "Local",
+    "CONV_RERANKER_LLM": "LLM",
+    "CONV_AUX_MODEL_LABEL": "Model bantu",
+    "CONV_AUX_MODEL_HELP": (
+        "Model kecil dan cepat untuk dekomposisi kueri, state percakapan, saran "
+        "pertanyaan lanjutan, dan pemeringkatan ulang LLM."
+    ),
+    "CONV_DECOMPOSITION_LABEL": "Dekomposisi kueri",
+    "CONV_DECOMPOSITION_HELP": "Pecah pertanyaan multi-bagian menjadi pencarian terpisah.",
+    "CONV_FOLLOWUPS_LABEL": "Saran pertanyaan lanjutan",
+    "CONV_FOLLOWUPS_HELP": "Sarankan pertanyaan lanjutan yang bisa dijawab dokumen.",
+    "CONV_INSPECT_LABEL": "Mode inspeksi",
+    "CONV_INSPECT_HELP": "Tampilkan bagaimana setiap jawaban dibangun.",
+    "CONV_THRESHOLD_LABEL": "Ambang pertanyaan lanjutan",
+    "CONV_THRESHOLD_HELP": (
+        "Pertanyaan lanjutan disimpan di atas ambang atas, dibuang di bawah ambang "
+        "bawah, dan diperiksa model di antaranya."
+    ),
+    "CONV_THRESHOLD_CAPTION": (
+        ":red-badge[Buang ≤ {drop}] :orange-badge[Periksa] :green-badge[Simpan ≥ {keep}]"
+    ),
+    "CONV_INSPECT_EXPANDER": "🔎 Inspeksi giliran ini",
+    "CONV_TAB_DECOMPOSITION": "Dekomposisi",
+    "CONV_TAB_RETRIEVAL": "Retrieval",
+    "CONV_TAB_RERANKING": "Pemeringkatan ulang",
+    "CONV_TAB_STATE": "State percakapan",
+    "CONV_TAB_FOLLOWUPS": "Pertanyaan lanjutan",
+    "CONV_INSPECT_QUESTION": "Pertanyaan Anda",
+    "CONV_INSPECT_SUBQUESTIONS": "Sub-pertanyaan",
+    "CONV_INSPECT_DEGRADED": "Perencanaan dilewati atau kembali ke pertanyaan asli.",
+    "CONV_INSPECT_RERANKER_USED": "Pemeringkat ulang: {reranker}",
+    "CONV_INSPECT_STATE_SUMMARY": "Ringkasan",
+    "CONV_INSPECT_STATE_ENTITIES": "Entitas",
+    "CONV_INSPECT_STATE_THREADS": "Utas terbuka",
+    "CONV_INSPECT_STATE_RECENT": "Pertanyaan terbaru",
+    "CONV_INSPECT_STATE_EMPTY": "Belum ada memory percakapan.",
+    "CONV_INSPECT_FOLLOWUPS_NONE": "Tidak ada saran pertanyaan lanjutan untuk giliran ini.",
+    "CONV_META_TIMINGS": "Waktu (d)",
+    "CONV_META_PLAN": "Rencana",
+    "CONV_META_RETRIEVE": "Retrieval",
+    "CONV_META_RERANK": "Pemeringkatan ulang",
+    "CONV_META_ANSWER": "Jawaban",
+    "CONV_META_FOLLOWUPS": "Lanjutan",
+    "CONV_META_STATE": "State",
+    "CONV_META_ANSWER_MODEL": "Model jawaban",
+    "CONV_META_AUX_MODEL": "Model bantu",
+    "CONV_META_RERANKER": "Pemeringkat ulang",
+    "CONV_FOLLOWUPS_CAPTION": "💡 Saran pertanyaan lanjutan",
+    "CONV_HISTORY_PANEL_TITLE": "Riwayat percakapan",
+    "CONV_HISTORY_EMPTY": "Giliran tersimpan muncul di sini.",
+    "CONV_HISTORY_PIN": "Sematkan",
+    "CONV_HISTORY_UNPIN": "Lepas",
+    "CONV_HISTORY_REPLAY": "Tanya lagi",
     # ── Form ──────────────────────────────────────────────────────────────
     "FORM_SUBHEADER": "⚙️ Atur crawl Anda",
     "FORM_CAPTION": (

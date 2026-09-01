@@ -23,10 +23,19 @@ build_rag_prompt(question, chunks, tone, *, template=RAG_PROMPT_TEMPLATE)  # Ste
 stream_prompt(chat_model, prompt)           # Step 4 (send the raw prompt, streamed)
   └─ PromptGeneration                        → streams answer text; exposes TokenUsage after
 
-chat_answer(run_dir, question, history, config)  # Step 5
+chat_answer(run_dir, question, history, config)  # Step 5 (simple, history-aware)
   ├─ condense_question(model, history, q)    → standalone search query
   ├─ retrieve(...)                           → context chunks
   └─ generate_chat_answer(...)               → RagAnswer (history-aware)
+
+conversational_answer(run_dir, question, state, config)  # Step 5 (advanced pipeline)
+  ├─ plan_queries(...)                       → QueryPlan (decompose via aux model)
+  ├─ retrieve_multi(...)                     → merged, deduped chunks (parallel)
+  ├─ rerank_chunks(...)                      → off / local cross-encoder / LLM
+  ├─ generate_chat_answer(...)               → grounded answer
+  ├─ suggest_followups / validate_followups  → ValidatedFollowup[] (answerable only)
+  └─ update_state(...)                       → next ConversationState
+                                             → ConversationalAnswer (+ plan, timings)
 ```
 
 ## Install
@@ -118,15 +127,18 @@ UI can render it. Message codes/builders live in `rag_engine.messages`.
 
 | Module | Responsibility |
 |---|---|
-| `config.py` | `RagConfig` (Pydantic v2): `llm_model`, `temperature`, `max_tokens`, `top_k`, `score_threshold`, `search_type`, `fetch_k`, `lambda_mult`, `source_filter` |
+| `config.py` | `RagConfig` (Pydantic v2): `llm_model`, `temperature`, `max_tokens`, `top_k`, `score_threshold`, `search_type`, `fetch_k`, `lambda_mult`, `source_filter`; `ConversationalConfig` (Step 5 stage flags + thresholds, wraps a `RagConfig`) |
 | `catalog.py` | `ChatModelInfo`, `CHAT_MODEL_OPTIONS` (Bedrock Nova/Claude APAC profiles + Qwen3/Gemma/Mistral/NVIDIA in-Region + OpenAI Direct API, echo; sorted by cloud → provider → size → name), `DEFAULT_CHAT_MODEL` (pinned to Bedrock Claude), `ECHO_MODEL` |
-| `llm/` | `resolve_chat_model` (init_chat_model + echo fallback), `thinking_disabled_model_kwargs` (best-effort per-provider), lazy echo model |
-| `retrieval.py` | reopen a persisted index via a `VectorSearcher`, run similarity or MMR search with an optional source filter, and post-filter by score threshold (Step 3) |
+| `llm/` | `resolve_chat_model` (init_chat_model + echo fallback), `resolve_auxiliary_model` (small helper model for Step 5), `thinking_disabled_model_kwargs`, lazy echo model |
+| `retrieval.py` | reopen a persisted index via a `VectorSearcher`, run similarity or MMR search with an optional source filter, post-filter by score threshold (Step 3); `retrieve_multi` (parallel per-sub-question, deduped) |
 | `search.py` | `VectorSearcher` interface + `ChromaSearcher` + backend-neutral `SearchHit` |
-| `prompts.py` | QA + condense-question prompts, context formatting; `build_rag_prompt` / `format_knowledge` (Step 4 editable prompt) |
+| `prompts.py` | QA + condense-question prompts, context formatting; `build_rag_prompt` / `format_knowledge` (Step 4); Step 5 auxiliary templates + tolerant JSON parsers |
 | `qa.py` | `answer_question` / `generate_answer` / `stream_answer`; `stream_prompt` / `generate_from_prompt` (raw editable prompt, Step 4) |
-| `chat.py` | `chat_answer` / `condense_question` / `generate_chat_answer` (Step 5) |
-| `models.py` | `RetrievedChunk`, `RagAnswer`, `ChatTurn`, `TokenUsage` |
+| `chat.py` | `chat_answer` / `condense_question` / `generate_chat_answer`; `conversational_answer` (advanced Step 5 pipeline) |
+| `decompose.py` | `plan_queries` (reference resolution + decomposition) + `update_state` (rolling conversation state) |
+| `rerank.py` | `rerank_chunks` (off / local cross-encoder / LLM), lazy `load_cross_encoder` |
+| `followups.py` | `suggest_followups` + `validate_followups` (probe-retrieve + threshold gate) + `answerability_check` |
+| `models.py` | `RetrievedChunk`, `RagAnswer`, `ChatTurn`, `TokenUsage`; `QueryPlan`, `ConversationState`, `ValidatedFollowup`, `ConversationalAnswer` |
 | `messages.py` | stable `rag.*` message codes + builders |
 
 ## Constraints

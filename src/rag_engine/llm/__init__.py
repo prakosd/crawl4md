@@ -18,17 +18,20 @@ from typing import TYPE_CHECKING, Any
 from artifact_store import LibraryMessage
 from log4py import get_logger
 from rag_engine import messages
-from rag_engine.catalog import ECHO_MODEL, ECHO_PROVIDER, get_chat_model_info
+from rag_engine.catalog import CHAT_MODEL_OPTIONS, ECHO_MODEL, ECHO_PROVIDER, get_chat_model_info
 from rag_engine.llm.echo import build_echo_chat_model
 
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
+
+    from rag_engine.config import ConversationalConfig
 
 __all__ = [
     "ChatModelUnavailable",
     "ResolvedChatModel",
     "build_chat_model",
     "build_echo_chat_model",
+    "resolve_auxiliary_model",
     "resolve_chat_model",
     "thinking_disabled_model_kwargs",
 ]
@@ -150,3 +153,31 @@ def resolve_chat_model(
         )
         return ResolvedChatModel(model=model, model_id=ECHO_MODEL), warnings
     return ResolvedChatModel(model=model, model_id=model_id.strip()), warnings
+
+
+def resolve_auxiliary_model(
+    config: ConversationalConfig,
+    *,
+    resolver: Callable[..., tuple[ResolvedChatModel, list[LibraryMessage]]] = resolve_chat_model,
+    builder: Callable[..., BaseChatModel] = build_chat_model,
+) -> tuple[ResolvedChatModel, list[LibraryMessage]]:
+    """Resolve a small helper model for planning/state/follow-ups/LLM re-ranking.
+
+    Uses ``config.aux_model_id`` when set; otherwise auto-picks the first
+    *available* small cloud model in the catalog (probed via ``builder`` without a
+    network call); otherwise reuses the main answer model and warns with
+    ``rag.chat.aux_model_fallback``. Auxiliary work is deterministic, so the model
+    is built at temperature 0.
+    """
+    max_tokens = config.rag.max_tokens
+    if config.aux_model_id:
+        return resolver(config.aux_model_id, temperature=0.0, max_tokens=max_tokens)
+    for info in CHAT_MODEL_OPTIONS:
+        if info.size == "small" and info.kind == "cloud":
+            try:
+                model = builder(info.model_id, temperature=0.0, max_tokens=max_tokens)
+            except ChatModelUnavailable:
+                continue
+            return ResolvedChatModel(model=model, model_id=info.model_id), []
+    resolved, warnings = resolver(config.rag.llm_model, temperature=0.0, max_tokens=max_tokens)
+    return resolved, [messages.aux_model_fallback("no small cloud model is available"), *warnings]

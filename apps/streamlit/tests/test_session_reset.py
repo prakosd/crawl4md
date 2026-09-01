@@ -9,6 +9,7 @@ from pytest import MonkeyPatch
 
 from app_support.session_reset import (
     BASIC_RAG_QA_RESULT_KEYS,
+    CONVERSATIONAL_RAG_RESULT_KEYS,
     SEMANTIC_SEARCH_RESULT_KEYS,
     TRANSIENT_RESULT_KEYS,
     clear_transient_result_state,
@@ -63,4 +64,15 @@ def test_basic_rag_qa_keys_match_page_module(monkeypatch: MonkeyPatch) -> None:
         page._PROMPT_PENDING_KEY,
         page._ANSWER_KEY,
         page._STATS_KEY,
+    }
+
+
+def test_conversational_rag_keys_match_page_module(monkeypatch: MonkeyPatch) -> None:
+    page = _module(monkeypatch, "app_pages.conversational_rag")
+
+    assert set(CONVERSATIONAL_RAG_RESULT_KEYS) == {
+        page._TURNS_KEY,
+        page._STATE_KEY,
+        page._CACHE_KEY,
+        page._PENDING_KEY,
     }

@@ -12,7 +12,7 @@ Dev container is defined in `.devcontainer/devcontainer.json` (Python 3.12 + Chr
 - `--shm-size=2g` is required — Chromium crashes with Docker's default 64 MB `/dev/shm`.
 - Tesseract `eng` + `msa` are pre-installed to match `PageConfig.ocr_languages` defaults.
 - The yarn apt source is removed before `apt-get update` (expired GPG key in the base image).
-- Setup order: `pip install -e '.[dev,all]' -e 'apps/streamlit[dev]'` → `playwright install --with-deps chromium` → `crawl4ai-setup`. The `all` extra pulls every library (`crawl`, `vector`, `bedrock`, `openai`, `rag`); `dev` adds the test/lint tools.
+- Setup order: `pip install -e '.[dev,all]' -e 'apps/streamlit[dev]'` → `playwright install --with-deps chromium` → `crawl4ai-setup`. The `all` extra pulls every library (`crawl`, `vector`, `bedrock`, `openai`, `rag`, `rerank`); `dev` adds the test/lint tools.
 - Port `8501` is forwarded for the Streamlit app and should keep the `Streamlit rag-playground app` label.
 - `postAttachCommand` starts Streamlit with `python -m streamlit run apps/streamlit/streamlit_app.py --server.address=0.0.0.0 --server.port=8501`; keep `0.0.0.0` so forwarded ports work from containers and Codespaces.
 - `ANONYMIZED_TELEMETRY=False` is set in `containerEnv` to disable ChromaDB telemetry.
@@ -36,11 +36,13 @@ lightweight and atomic:
 - `openai` → `langchain-openai` (OpenAI embeddings + chat models; pulls `openai`).
 - `rag` → `langchain` (umbrella) + `langchain-core` + `pydantic` (`rag_engine`: retrieval +
   QA + conversational RAG; `init_chat_model` for provider switching).
-- `all` → `crawl` + `vector` + `bedrock` + `openai` + `rag` (convenience meta-extra).
+- `rerank` → `sentence-transformers` (optional cross-encoder re-ranking for conversational
+  RAG Step 5; pulls `torch`, so it is heavy — the "llm" and "off" re-rankers need it not).
+- `all` → `crawl` + `vector` + `bedrock` + `openai` + `rag` + `rerank` (convenience meta-extra).
 
 Streamlit app dependencies, including `streamlit`, live in `apps/streamlit/pyproject.toml`;
-the app depends on `rag-playground[crawl,vector,bedrock,openai,rag]` so installing it pulls the
-crawler, indexing backends, and the RAG engine. It also pulls `python-dotenv` and
+the app depends on `rag-playground[crawl,vector,bedrock,openai,rag,rerank]` so installing it pulls the
+crawler, indexing backends, the RAG engine, and the local cross-encoder re-ranker. It also pulls `python-dotenv` and
 `pydantic-settings` for the app's env-driven, non-secret settings layer
 (`app_support.settings`, loaded `.env.defaults` → `.env` → environment), and `PyYAML`
 for the RAG model pricing/metadata catalog (`config/model_pricing.yaml`, read by

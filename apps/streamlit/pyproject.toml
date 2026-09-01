@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Bundled Streamlit app for the rag-playground libraries"
 requires-python = ">=3.10"
 dependencies = [
-    "rag-playground[crawl,vector,bedrock,openai,rag]>=0.1.0",
+    "rag-playground[crawl,vector,bedrock,openai,rag,rerank]>=0.1.0",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
     "python-dotenv>=1.0",

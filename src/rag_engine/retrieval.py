@@ -8,8 +8,10 @@ retrieval pipeline never touches a specific vector store directly. Heavy imports
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass, field
+import hashlib
+from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -26,9 +28,17 @@ from vector_indexer import (
     resolve_embedding,
 )
 
-__all__ = ["RetrievalResult", "load_index_embeddings", "retrieve"]
+__all__ = [
+    "RetrievalResult",
+    "chunk_identity",
+    "load_index_embeddings",
+    "retrieve",
+    "retrieve_multi",
+]
 
 _logger = get_logger(__name__)
+
+_DEFAULT_MAX_WORKERS = 6
 
 
 @dataclass
@@ -126,3 +136,100 @@ def _distance_to_similarity(distance: float) -> float:
     1.0 for an exact match and approaches 0 as the distance grows.
     """
     return 1.0 / (1.0 + max(0.0, float(distance)))
+
+
+def chunk_identity(chunk: RetrievedChunk) -> str:
+    """Return a stable identity for de-duplicating a chunk across sub-questions."""
+    digest = hashlib.sha1(chunk.text.encode("utf-8")).hexdigest()  # noqa: S324 - non-crypto id
+    return f"{chunk.source}::{digest}"
+
+
+def retrieve_multi(
+    run_dir: Path | str,
+    sub_questions: Sequence[str],
+    config: RagConfig,
+    *,
+    retriever: Callable[..., RetrievalResult] = retrieve,
+    max_workers: int = _DEFAULT_MAX_WORKERS,
+) -> RetrievalResult:
+    """Retrieve for each sub-question in parallel, then merge and de-duplicate.
+
+    A single sub-question short-circuits to a plain :func:`retrieve`. Otherwise
+    each sub-question gets its own ``top_k`` search; results are merged (keeping
+    the first, highest-scored occurrence of each chunk) and every chunk carries
+    the sub-questions it matched. One sub-question failing does not sink the
+    others — a ``rag.retrieval.partial_failure`` warning is recorded; only when
+    every sub-question fails are the errors surfaced.
+    """
+    questions = [text for text in (item.strip() for item in sub_questions) if text]
+    if not questions:
+        return RetrievalResult()
+    if len(questions) == 1:
+        return retriever(run_dir, questions[0], config)
+
+    workers = max(1, min(max_workers, len(questions)))
+    results: dict[str, RetrievalResult] = {}
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {
+            executor.submit(retriever, run_dir, question, config): question
+            for question in questions
+        }
+        for future, question in futures.items():
+            try:
+                results[question] = future.result()
+            except Exception as exc:  # noqa: BLE001 - one sub-question failing is tolerated
+                _logger.warning("Retrieval failed for sub-question %r: %s", question, exc)
+
+    merged: list[RetrievedChunk] = []
+    index_by_identity: dict[str, int] = {}
+    warnings: list[LibraryMessage] = []
+    errors: list[LibraryMessage] = []
+    failed: list[str] = []
+    any_ok = False
+    for question in questions:
+        result = results.get(question)
+        if result is None:
+            failed.append(question)
+            continue
+        warnings.extend(result.warnings)
+        if result.errors:
+            failed.append(question)
+            errors.extend(result.errors)
+            continue
+        any_ok = True
+        for chunk in result.chunks:
+            identity = chunk_identity(chunk)
+            existing = index_by_identity.get(identity)
+            if existing is None:
+                index_by_identity[identity] = len(merged)
+                merged.append(replace(chunk, matched_queries=(question,)))
+            elif question not in merged[existing].matched_queries:
+                merged[existing] = replace(
+                    merged[existing],
+                    matched_queries=(*merged[existing].matched_queries, question),
+                )
+
+    warnings = _dedupe_by_code(warnings)
+    if not any_ok:
+        return RetrievalResult(chunks=[], warnings=warnings, errors=_dedupe_by_code(errors))
+    merged.sort(key=lambda chunk: chunk.score, reverse=True)
+    if failed:
+        warnings.append(messages.retrieval_partial_failure(", ".join(failed)))
+    _logger.info(
+        "Multi-query retrieval: %d sub-question(s), %d unique chunk(s)",
+        len(questions),
+        len(merged),
+    )
+    return RetrievalResult(chunks=merged, warnings=warnings)
+
+
+def _dedupe_by_code(items: list[LibraryMessage]) -> list[LibraryMessage]:
+    """Keep the first message per code (per-sub-question warnings are redundant)."""
+    seen: set[str] = set()
+    unique: list[LibraryMessage] = []
+    for message in items:
+        if message.code in seen:
+            continue
+        seen.add(message.code)
+        unique.append(message)
+    return unique

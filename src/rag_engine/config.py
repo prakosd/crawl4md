@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from rag_engine.catalog import DEFAULT_CHAT_MODEL
 
-__all__ = ["RagConfig"]
+__all__ = ["ConversationalConfig", "RagConfig"]
 
 _DEFAULT_TEMPERATURE = 0.0
 _MAX_TEMPERATURE = 2.0
@@ -62,3 +62,75 @@ class RagConfig(BaseModel):
         if value < 1:
             raise ValueError("Value must be at least 1.")
         return value
+
+
+class ConversationalConfig(BaseModel):
+    """Knobs for the advanced conversational RAG pipeline (Step 5).
+
+    Wraps a :class:`RagConfig` (retrieval + answer generation) and adds the
+    stage toggles and thresholds for query decomposition, re-ranking, rolling
+    conversation state, and validated follow-up suggestions. UI controls map
+    directly onto these fields.
+    """
+
+    rag: RagConfig = Field(default_factory=RagConfig)
+    # Small helper model for planning/state/follow-ups/LLM re-rank; None = auto-pick.
+    aux_model_id: str | None = None
+
+    plan_enabled: bool = True
+    plan_max_subquestions: int = 4
+    plan_recent_turns: int = 2
+
+    reranker: Literal["off", "local", "llm"] = "local"
+    rerank_top_n: int = 5
+
+    followups_enabled: bool = True
+    followup_candidate_count: int = 6
+    followup_show_count: int = 3
+    followup_probe_k: int = 3
+    # At/above keep outright; at/below drop outright; between -> LLM answerability check.
+    followup_min_score: float = 0.60
+    followup_drop_score: float = 0.40
+    answerability_chunks: int = 2
+
+    answer_recent_turns: int = 3
+    state_summary_start_turn: int = 4
+    state_summary_max_words: int = 150
+
+    max_workers: int = 6
+
+    @field_validator("followup_min_score", "followup_drop_score")
+    @classmethod
+    def _validate_unit_interval(cls, value: float) -> float:
+        if not 0.0 <= value <= 1.0:
+            raise ValueError("Value must be between 0 and 1.")
+        return value
+
+    @field_validator(
+        "plan_max_subquestions",
+        "rerank_top_n",
+        "followup_candidate_count",
+        "followup_show_count",
+        "followup_probe_k",
+        "answerability_chunks",
+        "state_summary_max_words",
+        "max_workers",
+    )
+    @classmethod
+    def _require_positive(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("Value must be at least 1.")
+        return value
+
+    @field_validator("plan_recent_turns", "answer_recent_turns", "state_summary_start_turn")
+    @classmethod
+    def _require_non_negative(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("Value must be 0 or greater.")
+        return value
+
+    @model_validator(mode="after")
+    def _validate_threshold_order(self) -> ConversationalConfig:
+        if self.followup_drop_score > self.followup_min_score:
+            raise ValueError("followup_drop_score must be <= followup_min_score.")
+        return self

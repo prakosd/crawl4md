@@ -5,7 +5,7 @@
 # being copied to site-packages: app_support.settings resolves .env.defaults
 # via a __file__-relative repo-root path, which only exists while the package lives
 # in the checkout. A non-editable copy severs that path and fails settings load.
--e .[crawl,vector,bedrock,openai,rag]
+-e .[crawl,vector,bedrock,openai,rag,rerank]
 -e ./apps/streamlit
 
 # Bracket the protobuf runtime to the range the chromadb/opentelemetry generated

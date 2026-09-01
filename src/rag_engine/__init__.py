@@ -19,16 +19,27 @@ from rag_engine.catalog import (
 from rag_engine.chat import (
     chat_answer,
     condense_question,
+    conversational_answer,
     generate_chat_answer,
     stream_chat_answer,
 )
-from rag_engine.config import RagConfig
+from rag_engine.config import ConversationalConfig, RagConfig
 from rag_engine.llm import (
     ChatModelUnavailable,
     ResolvedChatModel,
+    resolve_auxiliary_model,
     resolve_chat_model,
 )
-from rag_engine.models import ChatTurn, RagAnswer, RetrievedChunk, TokenUsage
+from rag_engine.models import (
+    ChatTurn,
+    ConversationalAnswer,
+    ConversationState,
+    QueryPlan,
+    RagAnswer,
+    RetrievedChunk,
+    TokenUsage,
+    ValidatedFollowup,
+)
 from rag_engine.prompts import build_rag_prompt, format_knowledge
 from rag_engine.qa import (
     PromptGeneration,
@@ -38,7 +49,8 @@ from rag_engine.qa import (
     stream_answer,
     stream_prompt,
 )
-from rag_engine.retrieval import RetrievalResult, retrieve
+from rag_engine.rerank import rerank_chunks
+from rag_engine.retrieval import RetrievalResult, retrieve, retrieve_multi
 from rag_engine.search import ChromaSearcher, SearchHit, VectorSearcher, open_searcher
 
 __all__ = [
@@ -49,7 +61,11 @@ __all__ = [
     "ChatModelUnavailable",
     "ChatTurn",
     "ChromaSearcher",
+    "ConversationState",
+    "ConversationalAnswer",
+    "ConversationalConfig",
     "PromptGeneration",
+    "QueryPlan",
     "RagAnswer",
     "RagConfig",
     "ResolvedChatModel",
@@ -57,19 +73,24 @@ __all__ = [
     "RetrievedChunk",
     "SearchHit",
     "TokenUsage",
+    "ValidatedFollowup",
     "VectorSearcher",
     "answer_question",
     "build_rag_prompt",
     "chat_answer",
     "condense_question",
+    "conversational_answer",
     "format_knowledge",
     "generate_answer",
     "generate_chat_answer",
     "generate_from_prompt",
     "get_chat_model_info",
     "open_searcher",
+    "resolve_auxiliary_model",
     "resolve_chat_model",
+    "rerank_chunks",
     "retrieve",
+    "retrieve_multi",
     "stream_answer",
     "stream_chat_answer",
     "stream_prompt",

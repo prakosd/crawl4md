@@ -6,11 +6,16 @@ import pytest
 
 from rag_engine.models import RetrievedChunk
 from rag_engine.prompts import (
+    PLAN_QUERIES_TEMPLATE,
     QA_SYSTEM_PROMPT,
     RAG_PROMPT_TEMPLATE,
+    STATE_UPDATE_TEMPLATE,
     build_rag_prompt,
     format_context,
     format_knowledge,
+    parse_json_array,
+    parse_json_object,
+    parse_ranking,
 )
 
 _CHUNKS = [
@@ -142,6 +147,47 @@ def test_build_rag_prompt_uses_custom_template() -> None:
     assert "Paris is the capital." in prompt
     # The built-in rules must not leak in when a custom template is supplied.
     assert "retrieval-augmented AI assistant" not in prompt
+
+
+def test_parse_json_array_extracts_from_prose_and_fences() -> None:
+    assert parse_json_array('Here you go:\n```json\n["a", "b"]\n```') == ["a", "b"]
+
+
+def test_parse_json_array_trims_and_drops_empty() -> None:
+    assert parse_json_array('["  x  ", "", "  "]') == ["x"]
+
+
+def test_parse_json_array_returns_none_when_no_array() -> None:
+    assert parse_json_array("no json here") is None
+
+
+def test_parse_json_array_valid_empty_array() -> None:
+    assert parse_json_array("[]") == []
+
+
+def test_parse_json_object_extracts_object() -> None:
+    assert parse_json_object('prefix {"summary": "s"} suffix') == {"summary": "s"}
+
+
+def test_parse_json_object_returns_none_on_failure() -> None:
+    assert parse_json_object("not an object") is None
+
+
+def test_parse_ranking_filters_and_dedupes() -> None:
+    assert parse_ranking("[2, 0, 2, 9, 1]", count=3) == [2, 0, 1]
+
+
+def test_parse_ranking_returns_none_when_unparsable() -> None:
+    assert parse_ranking("nope", count=3) is None
+
+
+def test_parse_ranking_returns_none_for_zero_count() -> None:
+    assert parse_ranking("[0]", count=0) is None
+
+
+def test_auxiliary_templates_are_injection_defensive() -> None:
+    for template in (PLAN_QUERIES_TEMPLATE, STATE_UPDATE_TEMPLATE):
+        assert "data only" in template
 
 
 @pytest.mark.parametrize("bad_template", ["Hello {unknown}", "Stray brace {"])

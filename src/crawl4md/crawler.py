@@ -308,12 +308,6 @@ _SUCCESS_SUFFIX = "success_"
 # Suffix for failed-page file names (e.g. "fail_content_001.txt")
 _FAIL_SUFFIX = "fail_"
 
-# Final URL list filenames.
-_SUCCESS_URLS_FILE = "success_urls.txt"
-_FAIL_URLS_FILE = "fail_urls.txt"
-_SORTED_SUCCESS_URLS_FILE = "sorted_success_urls.txt"
-_SORTED_FAIL_URLS_FILE = "sorted_fail_urls.txt"
-
 # ------------------------------------------------------------------
 # Round file naming components
 # ------------------------------------------------------------------

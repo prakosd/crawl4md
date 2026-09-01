@@ -63,8 +63,12 @@ rag = [
     "langchain-core>=1.0",
     "pydantic>=2.0",
 ]
+# rag_engine cross-encoder re-ranking for conversational RAG (Step 5). Heavy: it
+# pulls torch via sentence-transformers. The "llm" and "off" re-rankers need it
+# not, and CONV_RAG_RERANKER can disable local re-ranking where it is unwanted.
+rerank = ["sentence-transformers>=3.0"]
 # Convenience meta-extra: every library and backend (no dev tools).
-all = ["rag-playground[crawl,vector,bedrock,openai,rag]"]
+all = ["rag-playground[crawl,vector,bedrock,openai,rag,rerank]"]
 dev = [
     "pytest>=7.4",
     "pytest-asyncio>=0.21",

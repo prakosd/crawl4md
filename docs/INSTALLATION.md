@@ -46,6 +46,15 @@ The pip distribution is `rag-playground`. Install it from a clone. The **base
 install pulls no third-party packages** (the `artifact_store` library is pure
 standard library) — add the extra(s) for the component you need.
 
+Work in an isolated virtualenv so the editable installs stay separate from any
+system or Conda environment:
+
+```bash
+python3 -m venv .venv          # Python 3.10+ (3.12/3.13 recommended)
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+python -m pip install --upgrade pip
+```
+
 ```bash
 # Everything (all libraries + dev tools) plus the Streamlit app:
 pip install -e ".[dev,all]" -e "apps/streamlit[dev]"
@@ -58,6 +67,10 @@ drives a real browser):
 crawl4ai-setup                          # one-time browser setup
 playwright install --with-deps chromium # install Chromium for JS rendering
 ```
+
+> On **macOS** (and other non-Debian hosts) drop `--with-deps` — it installs
+> Debian/Ubuntu system packages and is not supported there, so run
+> `playwright install chromium` instead.
 
 ### Install only what you need
 
@@ -72,6 +85,7 @@ build a vector index:
 | `pip install -e ".[vector,bedrock]"` | + Amazon Titan embeddings | No |
 | `pip install -e ".[vector,openai]"` | + OpenAI embeddings | No |
 | `pip install -e ".[vector,rag]"` | `rag_engine` — RAG Q&A / chat (offline echo model) | No |
+| `pip install -e ".[vector,rag,rerank]"` | + Step 5 local cross-encoder re-ranker | Yes (model) |
 | `pip install -e ".[all]"` | every library + backend | Yes |
 
 Remember to import the library names (`crawl4md`, `vector_indexer`, `rag_engine`,
@@ -89,7 +103,8 @@ Every library is an opt-in extra so each install stays lightweight:
 | `bedrock` | `langchain-aws` (pulls `boto3`) | Amazon Titan embeddings **and** Bedrock chat models |
 | `openai` | `langchain-openai` (pulls `openai`) | OpenAI embeddings **and** chat models |
 | `rag` | `langchain` (umbrella), `langchain-core`, `pydantic` | retrieval + QA + conversational RAG (Steps 3-5) |
-| `all` | `crawl` + `vector` + `bedrock` + `openai` + `rag` | the full playground |
+| `rerank` | `sentence-transformers` (pulls `torch`) | Step 5 local cross-encoder re-ranker (heavy; the LLM/off re-rankers need it not) |
+| `all` | `crawl` + `vector` + `bedrock` + `openai` + `rag` + `rerank` | the full playground |
 | `dev` | `pytest`, `pytest-asyncio`, `pytest-cov`, `ruff`, `ipykernel` | tests, lint, notebook kernel |
 
 The extras are **audited to stay atomic**: every package listed above is imported by
