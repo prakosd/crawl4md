@@ -10,6 +10,7 @@ offline with the echo model.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
@@ -47,6 +48,12 @@ __all__ = [
 ]
 
 _logger = get_logger(__name__)
+
+
+def _report(callback: Callable[[LibraryMessage], None] | None, message: LibraryMessage) -> None:
+    """Send a pipeline-progress message to *callback* when one is provided."""
+    if callback is not None:
+        callback(message)
 
 
 def _history_messages(history: Sequence[ChatTurn]) -> list[tuple[str, str]]:
@@ -178,6 +185,7 @@ def conversational_answer(
     aux_resolver: Callable[
         ..., tuple[ResolvedChatModel, list[LibraryMessage]]
     ] = resolve_auxiliary_model,
+    progress_callback: Callable[[LibraryMessage], None] | None = None,
 ) -> ConversationalAnswer:
     """Answer a turn with the advanced conversational RAG pipeline (Step 5).
 
@@ -223,6 +231,7 @@ def conversational_answer(
             timings=timings,
             turn_index=turn_index,
             reranker_used=None,
+            progress_callback=progress_callback,
         )
 
     _logger.info(
@@ -232,6 +241,7 @@ def conversational_answer(
         aux_resolved.model_id,
     )
 
+    _report(progress_callback, messages.progress_plan())
     start = perf_counter()
     plan = plan_queries(
         aux_resolved.model, state, raw_question, config, model_id=aux_resolved.model_id
@@ -240,6 +250,7 @@ def conversational_answer(
     warnings.extend(plan.warnings)
     sub_questions = plan.sub_questions or [raw_question]
 
+    _report(progress_callback, messages.progress_retrieve())
     start = perf_counter()
     retrieval = retrieve_multi(
         run_dir,
@@ -263,6 +274,7 @@ def conversational_answer(
             errors=retrieval.errors,
         )
 
+    _report(progress_callback, messages.progress_rerank())
     start = perf_counter()
     reranked, rerank_warnings = rerank_chunks(
         sub_questions,
@@ -289,7 +301,51 @@ def conversational_answer(
         timings=timings,
         turn_index=turn_index,
         reranker_used=config.reranker,
+        progress_callback=progress_callback,
     )
+
+
+def _answer_stage(
+    resolved: ResolvedChatModel,
+    raw_question: str,
+    chunks: Sequence[RetrievedChunk],
+    history: Sequence[ChatTurn],
+) -> tuple[str, list[LibraryMessage], float]:
+    """Generate the grounded answer, returning (text, errors, elapsed seconds)."""
+    errors: list[LibraryMessage] = []
+    start = perf_counter()
+    answer_text = ""
+    try:
+        answer_text = generate_chat_answer(resolved.model, raw_question, chunks, history)
+    except Exception as exc:  # noqa: BLE001 - boundary around the chat backend
+        _logger.warning("Conversational RAG generation failed: %s", exc)
+        errors.append(messages.classify_generation_failure(str(exc)))
+    return answer_text, errors, perf_counter() - start
+
+
+def _followups_stage(
+    run_dir: Path | str,
+    aux: ResolvedChatModel,
+    chunks: Sequence[RetrievedChunk],
+    plan: QueryPlan,
+    config: ConversationalConfig,
+    retriever: Callable[..., RetrievalResult],
+) -> tuple[list[ValidatedFollowup], list[LibraryMessage], float]:
+    """Suggest and validate follow-ups, returning (follow_ups, warnings, elapsed seconds)."""
+    warnings: list[LibraryMessage] = []
+    follow_ups: list[ValidatedFollowup] = []
+    start = perf_counter()
+    try:
+        candidates = suggest_followups(aux.model, chunks, plan, config)
+        follow_ups = validate_followups(
+            run_dir, candidates, config, model=aux.model, retriever=retriever
+        )
+        if candidates and not follow_ups:
+            warnings.append(messages.followups_none_valid())
+    except Exception as exc:  # noqa: BLE001 - follow-ups are optional
+        _logger.warning("Follow-up generation failed: %s", exc)
+        warnings.append(messages.followups_generation_failed(str(exc)))
+    return follow_ups, warnings, perf_counter() - start
 
 
 def _compose_turn(
@@ -308,34 +364,30 @@ def _compose_turn(
     timings: dict[str, float],
     turn_index: int,
     reranker_used: str | None,
+    progress_callback: Callable[[LibraryMessage], None] | None = None,
 ) -> ConversationalAnswer:
-    """Generate the answer, validate follow-ups, and roll conversation state forward."""
-    errors: list[LibraryMessage] = []
-    start = perf_counter()
-    answer_text = ""
-    try:
-        answer_text = generate_chat_answer(resolved.model, raw_question, chunks, history)
-    except Exception as exc:  # noqa: BLE001 - boundary around the chat backend
-        _logger.warning("Conversational RAG generation failed: %s", exc)
-        errors.append(messages.classify_generation_failure(str(exc)))
-    timings["answer"] = perf_counter() - start
+    """Generate the answer and follow-ups concurrently, then roll state forward.
 
+    The answer (main model) and follow-ups (auxiliary model) are independent given
+    the retrieved chunks, so they run on a small thread pool to overlap their model
+    calls; ``update_state`` follows because it needs the finished answer.
+    """
+    _report(progress_callback, messages.progress_answer())
     follow_ups: list[ValidatedFollowup] = []
-    if config.followups_enabled and aux.model_id != ECHO_MODEL:
-        start = perf_counter()
-        try:
-            candidates = suggest_followups(aux.model, chunks, plan, config)
-            follow_ups = validate_followups(
-                run_dir, candidates, config, model=aux.model, retriever=retriever
-            )
-            if candidates and not follow_ups:
-                warnings.append(messages.followups_none_valid())
-        except Exception as exc:  # noqa: BLE001 - follow-ups are optional
-            _logger.warning("Follow-up generation failed: %s", exc)
-            warnings.append(messages.followups_generation_failed(str(exc)))
-        timings["followups"] = perf_counter() - start
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        answer_future = executor.submit(_answer_stage, resolved, raw_question, chunks, history)
+        followups_future = (
+            executor.submit(_followups_stage, run_dir, aux, chunks, plan, config, retriever)
+            if config.followups_enabled and aux.model_id != ECHO_MODEL
+            else None
+        )
+        answer_text, errors, timings["answer"] = answer_future.result()
+        if followups_future is not None:
+            follow_ups, followups_warnings, timings["followups"] = followups_future.result()
+            warnings.extend(followups_warnings)
 
     resolved_question = "; ".join(plan.sub_questions) or raw_question
+    _report(progress_callback, messages.progress_state())
     start = perf_counter()
     next_state = update_state(
         aux.model,

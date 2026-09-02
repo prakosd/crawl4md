@@ -29,12 +29,8 @@ from app_support.rag_shared.result_snapshot import StoredResult
 _RESULT_TAB_RAW = "raw"
 _RESULT_TAB_PREVIEW = "preview"
 
-# Trim the default vertical gap above each result card's Raw/Preview tabs so the
-# tabs sit closer to the chunk's caption.
-_RESULT_CARD_CSS = (
-    "<style>div[data-testid='stVerticalBlockBorderWrapper'] "
-    "div[data-testid='stTabs']{margin-top:-0.75rem}</style>"
-)
+# Material icon shown on each collapsed result-card panel (a text passage).
+_RESULT_CARD_ICON = ":material/article:"
 
 __all__ = [
     "RagPageContext",
@@ -54,6 +50,7 @@ __all__ = [
     "render_results_panel",
     "render_sources",
     "result_detail_caption",
+    "result_panel_title",
     "select_index",
     "sort_results_by_score",
     "stacked_label_value_html",
@@ -259,7 +256,7 @@ def result_detail_caption(strings: Strings, chunk: RetrievedChunk) -> str:
     """Build the per-result detail line: chunk id, character size, and language."""
     chunk_index = chunk.metadata.get("chunk_index", "?")
     parts = [
-        strings["SEARCH_RESULT_ID"].format(id=f"{chunk.source or '?'}#{chunk_index}"),
+        strings["SEARCH_RESULT_ID"].format(id=f"#{chunk_index}"),
         strings["SEARCH_RESULT_SIZE"].format(size=len(chunk.text)),
     ]
     language = chunk.metadata.get("language")
@@ -286,19 +283,28 @@ def ordered_result_tabs(default_tab: str) -> tuple[str, str]:
     return (_RESULT_TAB_RAW, _RESULT_TAB_PREVIEW)
 
 
+def result_panel_title(strings: Strings, rank: int, chunk: RetrievedChunk) -> str:
+    """Build a result card's collapsed-panel title: rank, chunk id, and similarity."""
+    chunk_index = chunk.metadata.get("chunk_index", "?")
+    return strings["SEARCH_RESULT_PANEL_TITLE"].format(
+        rank=rank,
+        id=f"{chunk.source or '?'}#{chunk_index}",
+        score=format_score_percent(chunk.score),
+    )
+
+
 def render_result_cards(
     strings: Strings,
     chunks: Sequence[RetrievedChunk],
     *,
     default_tab: str = _RESULT_TAB_RAW,
 ) -> None:
-    """Render ranked result cards (sorted highest-first) with no surrounding panel.
+    """Render ranked result cards (sorted highest-first) as collapsed panels.
 
-    Shared by the Step 3 results panel and the Step 4 search-results panel so both
-    show identical hit cards. Each card shows a source + similarity header row with
-    the chunk's id, size, and language beneath the title, then the chunk text in
-    Raw/Preview tabs (the configured *default_tab* first). The first card carries
-    the tab-gap CSS inline so it is not a standalone element that adds a spacer.
+    Shared by Steps 3-5 so every page shows identical hit cards. Each card is a
+    collapsed expander titled with its rank, chunk id, and similarity; expanding it
+    reveals the chunk's id/size/language line then the chunk text in Raw/Preview
+    tabs (the configured *default_tab* first).
     """
     tab_order = ordered_result_tabs(default_tab)
     tab_labels = {
@@ -306,27 +312,12 @@ def render_result_cards(
         _RESULT_TAB_PREVIEW: strings["SEARCH_RESULT_TAB_PREVIEW"],
     }
     for rank, chunk in enumerate(sort_results_by_score(chunks), start=1):
-        with st.container(border=True):
-            title_col, score_col = st.columns([0.7, 0.3], vertical_alignment="center")
-            # Fold the tab-gap CSS into the first card's title markdown so it is
-            # not a standalone element that would add an empty spacer above the
-            # first card — keeping the first card flush with the panel top.
-            lead_css = _RESULT_CARD_CSS if rank == 1 else ""
-            title_col.markdown(
-                f"{lead_css}"
-                f'<h4 style="margin:0;padding:0">'
-                f"{html.escape(strings['SEARCH_RESULT_HEADER'].format(rank=rank, source=chunk.source or '?'))}"
-                "</h4>",
-                unsafe_allow_html=True,
-            )
-            title_col.markdown(
-                f'<p style="opacity:0.6;font-size:0.875rem;margin:0;margin-bottom:0">'
+        with st.expander(
+            result_panel_title(strings, rank, chunk), icon=_RESULT_CARD_ICON, expanded=False
+        ):
+            st.markdown(
+                f'<p style="opacity:0.6;font-size:0.875rem;margin:0">'
                 f"{html.escape(result_detail_caption(strings, chunk))}</p>",
-                unsafe_allow_html=True,
-            )
-            score_col.markdown(
-                f'<h4 style="text-align:right;margin:0">'
-                f"{strings['SEARCH_RESULT_SIMILARITY']} {format_score_percent(chunk.score)}%</h4>",
                 unsafe_allow_html=True,
             )
             tabs = st.tabs([tab_labels[key] for key in tab_order])

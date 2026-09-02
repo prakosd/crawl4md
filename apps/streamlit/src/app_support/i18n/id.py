@@ -139,8 +139,7 @@ STRINGS_ID: Strings = {
         "(3-5) membuat pembacaan cepat dan fokus; lebih banyak (10+) memperluas cakupan tetapi "
         "menambah yang harus ditinjau. Mulai dari sekitar 5."
     ),
-    "SEARCH_RESULT_HEADER": "#{rank} · {source}",
-    "SEARCH_RESULT_SIMILARITY": "Kemiripan",
+    "SEARCH_RESULT_PANEL_TITLE": "#{rank} • {id} • {score}%",
     "SEARCH_RESULT_TAB_PREVIEW": "Pratinjau",
     "SEARCH_RESULT_TAB_RAW": "Mentah",
     "SEARCH_RESULT_ID": "Chunk {id}",
@@ -695,6 +694,11 @@ STRINGS_ID: Strings = {
     },
     # ── Kode pesan library (terjemahan; kode yang tidak ada pakai teks library) ─
     "MESSAGE_CODES": {
+        "rag.progress.plan": ":material/account_tree: Memecah pertanyaan Anda…",
+        "rag.progress.retrieve": ":material/search: Mencari di basis pengetahuan…",
+        "rag.progress.rerank": ":material/sort: Mengurutkan hasil terbaik…",
+        "rag.progress.answer": ":material/edit_note: Menulis jawaban…",
+        "rag.progress.state": ":material/check_circle: Menyelesaikan…",
         "crawl.browser_missing": (
             "Binari browser Playwright tidak ada di lingkungan Python ini. "
             "Instal Chromium lalu coba crawl lagi:\n"

@@ -90,8 +90,7 @@ class Strings(TypedDict):
     SEARCH_META_COLLECTION: str
     SEARCH_TOP_N_LABEL: str
     SEARCH_TOP_N_HELP: str
-    SEARCH_RESULT_HEADER: str  # template: {rank}, {source}
-    SEARCH_RESULT_SIMILARITY: str
+    SEARCH_RESULT_PANEL_TITLE: str  # template: {rank}, {id}, {score}
     SEARCH_RESULT_TAB_PREVIEW: str
     SEARCH_RESULT_TAB_RAW: str
     SEARCH_RESULT_ID: str  # template: {id}

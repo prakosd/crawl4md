@@ -8,7 +8,7 @@ behind it; ``default_text`` is the English shown when no localization exists.
 
 from __future__ import annotations
 
-from artifact_store import SEVERITY_ERROR, SEVERITY_WARNING, LibraryMessage
+from artifact_store import SEVERITY_ERROR, SEVERITY_INFO, SEVERITY_WARNING, LibraryMessage
 
 __all__ = [
     "CODE_AUX_MODEL_FALLBACK",
@@ -24,6 +24,11 @@ __all__ = [
     "CODE_NO_CONTEXT",
     "CODE_PLAN_SKIPPED_OFFLINE",
     "CODE_PLAN_UNPARSABLE",
+    "CODE_PROGRESS_ANSWER",
+    "CODE_PROGRESS_PLAN",
+    "CODE_PROGRESS_RERANK",
+    "CODE_PROGRESS_RETRIEVE",
+    "CODE_PROGRESS_STATE",
     "CODE_RERANK_UNAVAILABLE",
     "CODE_RETRIEVAL_FAILED",
     "CODE_RETRIEVAL_PARTIAL_FAILURE",
@@ -41,6 +46,11 @@ __all__ = [
     "no_context",
     "plan_skipped_offline",
     "plan_unparsable",
+    "progress_answer",
+    "progress_plan",
+    "progress_rerank",
+    "progress_retrieve",
+    "progress_state",
     "rerank_unavailable",
     "retrieval_failed",
     "retrieval_partial_failure",
@@ -63,6 +73,11 @@ CODE_RERANK_UNAVAILABLE = "rag.rerank.unavailable"
 CODE_FOLLOWUPS_NONE_VALID = "rag.followups.none_valid"
 CODE_FOLLOWUPS_GENERATION_FAILED = "rag.followups.generation_failed"
 CODE_RETRIEVAL_PARTIAL_FAILURE = "rag.retrieval.partial_failure"
+CODE_PROGRESS_PLAN = "rag.progress.plan"
+CODE_PROGRESS_RETRIEVE = "rag.progress.retrieve"
+CODE_PROGRESS_RERANK = "rag.progress.rerank"
+CODE_PROGRESS_ANSWER = "rag.progress.answer"
+CODE_PROGRESS_STATE = "rag.progress.state"
 
 # Substrings that mark a TLS/SSL certificate failure inside a backend exception.
 _SSL_ERROR_SIGNATURES = (
@@ -204,3 +219,27 @@ def retrieval_partial_failure(detail: str) -> LibraryMessage:
         f"Retrieval failed for one or more sub-questions: {detail}",
         detail=detail,
     )
+
+
+def _progress(code: str, text: str) -> LibraryMessage:
+    return LibraryMessage(code=code, default_text=text, params={}, severity=SEVERITY_INFO)
+
+
+def progress_plan() -> LibraryMessage:
+    return _progress(CODE_PROGRESS_PLAN, "Breaking your question into parts…")
+
+
+def progress_retrieve() -> LibraryMessage:
+    return _progress(CODE_PROGRESS_RETRIEVE, "Searching the knowledge base…")
+
+
+def progress_rerank() -> LibraryMessage:
+    return _progress(CODE_PROGRESS_RERANK, "Ranking the best matches…")
+
+
+def progress_answer() -> LibraryMessage:
+    return _progress(CODE_PROGRESS_ANSWER, "Writing the answer…")
+
+
+def progress_state() -> LibraryMessage:
+    return _progress(CODE_PROGRESS_STATE, "Finalizing…")

@@ -77,6 +77,38 @@ def test_conversational_answer_basic_flow(tmp_path: Path) -> None:
     assert result.plan.degraded is True
 
 
+def test_conversational_answer_reports_progress_stages(tmp_path: Path) -> None:
+    codes: list[str] = []
+
+    def retriever(run_dir, query, config):
+        return RetrievalResult(chunks=list(_CHUNKS))
+
+    def aux_resolver(config):
+        model = _ScriptedModel(reply='["What else about France?"]')
+        return ResolvedChatModel(model=model, model_id="aux"), []
+
+    conversational_answer(
+        tmp_path,
+        "Tell me about France",
+        ConversationState(),
+        ConversationalConfig(reranker="off"),
+        retriever=retriever,
+        chat_resolver=_main_resolver,
+        aux_resolver=aux_resolver,
+        progress_callback=lambda message: codes.append(message.code),
+    )
+
+    # Search stages report in order; the answer stage precedes wrap-up.
+    assert codes[:3] == [
+        messages.CODE_PROGRESS_PLAN,
+        messages.CODE_PROGRESS_RETRIEVE,
+        messages.CODE_PROGRESS_RERANK,
+    ]
+    assert messages.CODE_PROGRESS_ANSWER in codes
+    assert messages.CODE_PROGRESS_STATE in codes
+    assert codes.index(messages.CODE_PROGRESS_ANSWER) < codes.index(messages.CODE_PROGRESS_STATE)
+
+
 def test_conversational_answer_decomposes_with_real_aux(tmp_path: Path) -> None:
     queries: list[str] = []
 
@@ -166,3 +198,40 @@ def test_conversational_answer_populates_followups(tmp_path: Path) -> None:
 
     assert [f.question for f in result.follow_ups] == ["What else about France?"]
     assert "followups" in result.timings
+
+
+def test_conversational_answer_answer_failure_still_returns_followups(tmp_path: Path) -> None:
+    class _BoomModel(SimpleChatModel):
+        @property
+        def _llm_type(self) -> str:
+            return "boom"
+
+        def _call(self, messages, stop=None, run_manager=None, **kwargs) -> str:
+            raise RuntimeError("model down")
+
+    def retriever(run_dir, query, config):
+        return RetrievalResult(
+            chunks=[RetrievedChunk(text="ctx", source="a.md", score=0.9, metadata={})]
+        )
+
+    def main_resolver(model_id, *, temperature=0.0, max_tokens=1024):
+        return ResolvedChatModel(model=_BoomModel(), model_id="main"), []
+
+    def aux_resolver(config):
+        model = _ScriptedModel(reply='["What else about France?"]')
+        return ResolvedChatModel(model=model, model_id="aux"), []
+
+    result = conversational_answer(
+        tmp_path,
+        "Tell me about France",
+        ConversationState(),
+        ConversationalConfig(reranker="off"),
+        retriever=retriever,
+        chat_resolver=main_resolver,
+        aux_resolver=aux_resolver,
+    )
+
+    # The answer branch failed, but the concurrent follow-up branch still returned.
+    assert result.answer == ""
+    assert any(e.code == messages.CODE_GENERATION_FAILED for e in result.errors)
+    assert [f.question for f in result.follow_ups] == ["What else about France?"]

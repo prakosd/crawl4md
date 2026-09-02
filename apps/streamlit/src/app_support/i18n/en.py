@@ -136,8 +136,7 @@ STRINGS_EN: Strings = {
         "How many matching chunks to show, best score first. Fewer (3-5) keeps reading "
         "quick and focused; more (10+) widens coverage but adds more to scan. Start around 5."
     ),
-    "SEARCH_RESULT_HEADER": "#{rank} · {source}",
-    "SEARCH_RESULT_SIMILARITY": "Similarity",
+    "SEARCH_RESULT_PANEL_TITLE": "#{rank} • {id} • {score}%",
     "SEARCH_RESULT_TAB_PREVIEW": "Preview",
     "SEARCH_RESULT_TAB_RAW": "Raw",
     "SEARCH_RESULT_ID": "Chunk {id}",
@@ -688,5 +687,10 @@ STRINGS_EN: Strings = {
             "Install Chromium and then retry the crawl:\n"
             "playwright install --with-deps chromium"
         ),
+        "rag.progress.plan": ":material/account_tree: Breaking your question into parts…",
+        "rag.progress.retrieve": ":material/search: Searching the knowledge base…",
+        "rag.progress.rerank": ":material/sort: Ranking the best matches…",
+        "rag.progress.answer": ":material/edit_note: Writing the answer…",
+        "rag.progress.state": ":material/check_circle: Finalizing…",
     },
 }

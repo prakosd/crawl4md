@@ -19,6 +19,7 @@ from app_support.rag_shared.rag_ui import (
     local_time_label,
     ordered_result_tabs,
     result_detail_caption,
+    result_panel_title,
     sort_results_by_score,
     stacked_label_value_html,
 )
@@ -142,9 +143,25 @@ def test_result_detail_caption_includes_chunk_id_size_and_language() -> None:
 
     caption = result_detail_caption(STRINGS_EN, chunk)
 
-    assert "doc.md#3" in caption
+    assert "Chunk #3" in caption
+    assert "doc.md" not in caption  # source lives in the panel title, not the caption
     assert "11 chars" in caption  # len("hello world") == 11
     assert "english" in caption
+
+
+def test_result_panel_title_includes_rank_source_chunk_and_score() -> None:
+    chunk = RetrievedChunk(
+        text="hello world",
+        source="doc.md",
+        score=0.66,
+        metadata={"chunk_index": "30", "language": "english"},
+    )
+
+    title = result_panel_title(STRINGS_EN, 1, chunk)
+
+    assert "#1" in title
+    assert "doc.md#30" in title
+    assert "66%" in title
 
 
 def test_index_metadata_rows_include_key_manifest_fields() -> None:

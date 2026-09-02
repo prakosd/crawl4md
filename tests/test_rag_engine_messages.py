@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from artifact_store import SEVERITY_ERROR, SEVERITY_WARNING
+from artifact_store import SEVERITY_ERROR, SEVERITY_INFO, SEVERITY_WARNING
 from rag_engine import messages
 
 
@@ -90,3 +90,17 @@ def test_retrieval_partial_failure_is_a_warning() -> None:
 
     assert message.code == messages.CODE_RETRIEVAL_PARTIAL_FAILURE
     assert message.severity == SEVERITY_WARNING
+
+
+def test_progress_builders_are_info_severity_with_stage_codes() -> None:
+    pairs = (
+        (messages.progress_plan(), messages.CODE_PROGRESS_PLAN),
+        (messages.progress_retrieve(), messages.CODE_PROGRESS_RETRIEVE),
+        (messages.progress_rerank(), messages.CODE_PROGRESS_RERANK),
+        (messages.progress_answer(), messages.CODE_PROGRESS_ANSWER),
+        (messages.progress_state(), messages.CODE_PROGRESS_STATE),
+    )
+    for message, code in pairs:
+        assert message.code == code
+        assert message.severity == SEVERITY_INFO
+        assert message.default_text
