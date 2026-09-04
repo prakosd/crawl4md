@@ -30,7 +30,9 @@ dependencies = []
 # crawl4md — crawl websites and extract Markdown (Step 1).
 crawl = [
     "crawl4ai>=0.8.6",
-    "trafilatura>=1.6.0",
+    # Capped below 2.1: trafilatura 2.1+ stopped emitting inline links with
+    # output_format="markdown" (include_links=True), which the extractor relies on.
+    "trafilatura>=1.6.0,<2.1",
     "markdownify>=0.11.0",
     "beautifulsoup4>=4.12.0",
     "mdformat>=0.7.19",
