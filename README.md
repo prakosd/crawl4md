@@ -5,7 +5,7 @@
 
 > **Live demo:** a hosted instance runs on Streamlit Community Cloud at **<https://rag-playground-prakosd.streamlit.app/>** — crawl a small site, build an index, and try Steps 3–5 right in the browser (the offline echo model answers when no cloud credentials are configured).
 
-A practical RAG playground that bundles five independent Python libraries plus a browser-based Streamlit app. **Step 1** crawls websites into clean Markdown (wrapping [Crawl4AI](https://github.com/unclecode/crawl4ai) with a synchronous Python API that also works in Jupyter) and **Step 2** builds a searchable vector index from those outputs. **Steps 3–5** add semantic search, single-turn RAG Q&A, and conversational (history-aware) RAG over those indexes — all runnable offline with a built-in echo model when no cloud credentials are set.
+A practical RAG playground that bundles five independent Python libraries plus a browser-based Streamlit app. **Step 1** crawls websites into clean Markdown (wrapping [Crawl4AI](https://github.com/unclecode/crawl4ai) with a synchronous Python API) and **Step 2** builds a searchable vector index from those outputs. **Steps 3–5** add semantic search, single-turn RAG Q&A, and conversational (history-aware) RAG over those indexes — all runnable offline with a built-in echo model when no cloud credentials are set.
 
 **Naming:** the pip **distribution** is `rag-playground`. The **import packages** are unchanged — `import crawl4md`, `import vector_indexer`, `import rag_engine`, `import artifact_store`, `import log4py` (and `app_support` for the app). Installing `rag-playground` does not create an `import rag_playground`; you import the individual libraries you need.
 
@@ -24,13 +24,13 @@ The libraries are UI-independent and enforced separate by boundary tests; the St
 
 ## Features
 
-- **Synchronous API** — no `async`/`await`; works seamlessly in Jupyter Notebooks
+- **Synchronous API** — no `async`/`await`; call it from any Python program
 - **PDF support** — detects and extracts PDF URLs via pymupdf4llm; scanned PDFs via OCR (requires [Tesseract](https://github.com/tesseract-ocr/tesseract))
 - **Word (.docx) support** — detects and extracts `.docx` URLs via mammoth, converting them to Markdown alongside crawled pages (legacy `.doc` is not supported)
 - **Smart content extraction** — trafilatura with markdownify fallback, plus supplementary recovery for FAQs, accordions, and product metadata
 - **WAF / bot-detection handling** — two-stage detection with automatic retry rounds and cooldown (round 1 uses the standard stealth browser; retries escalate to Crawl4AI's undetected browser), plus opt-in escalation: direct-first proxy rotation and a last-resort scraping-API fallback, each used at most once per crawl and logged to `logs/network_usage.csv` for cost tracking (see [Configuration](docs/CONFIGURATION.md))
 - **Size-limited, sorted output** — pages are never split across files; final files are sorted by URL path
-- **Real-time progress** — browser charts in Streamlit, spider widget in Jupyter, plain-text ETA in terminal
+- **Real-time progress** — browser charts in Streamlit, plain-text ETA in terminal
 - **Stop-safe output** — stopping a crawl still writes final output for completed pages
 - **Vector indexing (Step 2)** — index `.md` / `.txt` / `.zip` outputs into a langchain-chroma (ChromaDB) vector store with configurable chunking and embedding backends (Amazon Titan, OpenAI, or an offline default); crawl run metadata is dropped and every chunk is stamped with its page `Source: [title](url)`
 - **RAG Q&A (Steps 3–4)** — semantic search plus a Basic RAG Q&A page that retrieves knowledge, builds an editable, grounded prompt, and streams a language-model answer with token/latency stats
@@ -41,6 +41,17 @@ The libraries are UI-independent and enforced separate by boundary tests; the St
 ## Set up local development
 
 These steps install **all four libraries** (`artifact_store`, `crawl4md`, `vector_indexer`, `rag_engine`) and the **Streamlit app** so you can work on everything.
+
+### Quick setup (one command)
+
+After cloning and installing the [Tesseract prerequisite](#1-prerequisites), let the bundled task runner create the virtual environment and install everything:
+
+```bash
+python dev.py install   # create .venv and install all libraries + the app + browser
+python dev.py run       # launch the Streamlit app at http://localhost:8501
+```
+
+`dev.py` uses only the standard library, so it runs before any dependency exists. Prefer to do it by hand (or on Windows)? Follow the numbered steps below.
 
 ### 1. Prerequisites
 
@@ -96,7 +107,7 @@ pytest apps/streamlit/tests # Streamlit app tests
 ruff check .                # lint
 ```
 
-**Prefer not to install anything?** Open the repo in GitHub Codespaces (badge above) or VS Code Dev Containers — the container installs all of the above and auto-starts the app at `http://localhost:8501`. See [docs/INSTALLATION.md](docs/INSTALLATION.md). Or open `notebooks/crawl4md.ipynb` for the notebook workflow.
+**Prefer not to install anything?** Open the repo in GitHub Codespaces (badge above) or VS Code Dev Containers — the container installs all of the above and auto-starts the app at `http://localhost:8501`. See [docs/INSTALLATION.md](docs/INSTALLATION.md).
 
 ## Start from sample data (skip crawling)
 

@@ -29,7 +29,7 @@ from app_support.conversational_rag.conversational_rag_history import (
 )
 from app_support.conversational_rag.followup_cache import get_cached_chunks, replace_followups
 from app_support.i18n import get_strings, localize_message
-from app_support.rag_shared.rag_ui import RagPageContext, render_messages, select_index
+from app_support.rag_shared.rag_ui import RagPageContext, render_messages
 from app_support.rag_shared.result_snapshot import stored_results
 from app_support.settings import get_settings
 
@@ -56,8 +56,8 @@ def render_page(context: RagPageContext) -> None:
     st.caption(strings["CHAT_SECTION_CAPTION"])
     st.html(_CHAT_ALIGN_CSS)
 
-    index = select_index(strings, list(context.list_indexes()), key="conversational_rag_index")
-    controls = render_advanced_controls(strings, "conversational_rag", disabled=index is None)
+    controls = render_advanced_controls(strings, "conversational_rag", list(context.list_indexes()))
+    index = controls.index
 
     turns: list[dict] = st.session_state.setdefault(_TURNS_KEY, [])
     state: ConversationState = st.session_state.setdefault(_STATE_KEY, ConversationState())

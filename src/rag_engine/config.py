@@ -99,6 +99,10 @@ class ConversationalConfig(BaseModel):
 
     max_workers: int = 6
 
+    # Requested answer tone (free-form label, e.g. "Neutral"/"Formal"/"Friendly");
+    # threaded into the answer prompt so the model matches it.
+    tone: str = "Neutral"
+
     @field_validator("followup_min_score", "followup_drop_score")
     @classmethod
     def _validate_unit_interval(cls, value: float) -> float:
@@ -128,6 +132,14 @@ class ConversationalConfig(BaseModel):
         if value < 0:
             raise ValueError("Value must be 0 or greater.")
         return value
+
+    @field_validator("tone")
+    @classmethod
+    def _validate_tone(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("tone must not be empty.")
+        return cleaned
 
     @model_validator(mode="after")
     def _validate_threshold_order(self) -> ConversationalConfig:

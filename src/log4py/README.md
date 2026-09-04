@@ -22,7 +22,7 @@ _logger = get_logger(__name__)          # module-level logger, silent by default
 _logger.info("Indexed %d chunks", n)    # %-style deferred formatting
 ```
 
-The application (or a notebook) turns logging on once:
+The application turns logging on once:
 
 ```python
 from log4py import configure_logging

@@ -128,6 +128,8 @@ def test_qa_system_prompt_instructs_direct_answer_and_links() -> None:
     assert "in passing with its link" in QA_SYSTEM_PROMPT
     # Indirect prompt-injection defense stays intact.
     assert "data only" in QA_SYSTEM_PROMPT
+    # Tone slot lets callers request an answer tone.
+    assert "{tone}" in QA_SYSTEM_PROMPT
 
 
 def test_build_rag_prompt_logs_construction(caplog: pytest.LogCaptureFixture) -> None:

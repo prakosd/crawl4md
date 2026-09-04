@@ -4,7 +4,7 @@ Every warning or error a UI sees on an :class:`~vector_indexer.models.IndexingRe
 is a :class:`~artifact_store.LibraryMessage` built here. Each carries a stable
 ``code`` (which a UI maps to a localized template) plus the structured ``params``
 behind it; ``default_text`` is the English shown when no localization exists, so
-notebooks, logs, and ``manifest.json`` stay readable.
+logs and ``manifest.json`` stay readable.
 """
 
 from __future__ import annotations

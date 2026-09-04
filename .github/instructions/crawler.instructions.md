@@ -5,7 +5,7 @@ applyTo: "src/crawl4md/crawler.py, tests/test_crawler.py, tests/test_crawler_ret
 
 # SiteCrawler
 
-Synchronous wrapper around Crawl4AI's async crawler. Uses `nest_asyncio` for Jupyter; Windows uses `ProactorEventLoop` in a `ThreadPoolExecutor`.
+Synchronous wrapper around Crawl4AI's async crawler. Runs the async crawler in a dedicated event loop, falling back to a `ThreadPoolExecutor` when a loop is already running; Windows uses `ProactorEventLoop` in a `ThreadPoolExecutor`.
 
 ## Constraints
 

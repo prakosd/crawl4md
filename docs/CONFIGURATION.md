@@ -57,7 +57,7 @@ crawl/index/RAG config models.
 | `VECTOR_DEFAULT_EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Embedding model pre-selected in the dropdown |
 | `RAG_TOP_K` | `4` | Chunks retrieved as context (Step 5 conversational) |
 | `BASIC_RAG_QA_TOP_RESULTS` | `5` | Top matches retrieved as knowledge on Step 4 (Basic RAG Q&A) |
-| `BASIC_RAG_QA_TONES` | `Neutral,Formal,Friendly,…` | Tones offered on the Step 4 Tone selector (comma-separated, in order) |
+| `BASIC_RAG_QA_TONES` | `Neutral,Formal,Friendly,…` | Tones offered on the Step 4 and Step 5 Tone selectors (comma-separated, in order) |
 | `BASIC_RAG_QA_DEFAULT_TONE` | `Neutral` | Tone pre-selected on the Step 4 selector |
 | `BASIC_RAG_QA_PROMPT_TEMPLATE_FILE` | `apps/streamlit/config/basic_rag_qa_prompt.txt` | Path (relative to the repo root) to the Step 4 default prompt template (a customer-service persona); edit it to reword the generated prompt without a code change. A per-session template saved from the app's **Edit template** editor takes precedence; a missing/empty file, or one missing a `{question}`/`{start}`/`{knowledge}`/`{end}`/`{tone}` field, falls back to the built-in library default. |
 | `BASIC_RAG_QA_SESSION_TOKEN_QUOTA` | `5700000` | Per-session token budget shown on the Step 4 Token usage panel (drives Quota and Usage). Set to ~`BASIC_RAG_QA_SESSION_COST_QUOTA` worth of tokens at the average small-model price (~$0.176/1M) so the token % and $ % roughly agree; display-only — it never blocks sending |

@@ -675,13 +675,48 @@ function makePlanet(node) {
 // Failed pages collapse into black holes: a pure-black event horizon that emits
 // no light of its own. The screen-space lensing pass warps the starfield around
 // it and draws its photon ring, so it reads as a dark body — a planet-like mass,
-// not a light source.
+// not a light source. A pulsar-style beacon (below) makes it easy to spot.
+const beacons = []; // { material } — the pulsar beacons pulsed each frame
+const BEACON_PULSE_SPEED = 3.2; // radians/sec of the beacon's brightness pulse
+const BEACON_LEN_SCALE = 6; // beam length as a multiple of the hole radius
+const BEACON_LEN_MIN = 2.5; // floor so even tiny holes get a visible beam (scene units)
+const BEACON_RADIUS_SCALE = 0.32; // beam base radius as a multiple of the hole radius
+const BEACON_HUE = 0xffb84d; // warm photon-ring hue, matching the black-hole look
+const BEACON_OPACITY = 0.34; // base additive opacity — a gentle glow, kept narrow
+
+// A pulsar-style beacon: two opposed beams tapering to a point along the vertical
+// axis so a failed page's black hole stands out among many planets. Pure additive
+// geometry with NO THREE.Light, so it never illuminates other bodies; kept narrow
+// and dim so the bloom pass only glows it gently, never washing its neighbours.
+function makeBlackHoleBeacon(r) {
+  const beamLen = r * BEACON_LEN_SCALE + BEACON_LEN_MIN;
+  const beamR = r * BEACON_RADIUS_SCALE;
+  const material = new THREE.MeshBasicMaterial({
+    color: BEACON_HUE,
+    transparent: true,
+    opacity: BEACON_OPACITY,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const group = new THREE.Group();
+  for (const dir of [1, -1]) {
+    // Open-ended cone: base at the pole, apex tapering outward (no bright end cap).
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(beamR, beamLen, 12, 1, true), material);
+    cone.position.y = dir * (r + beamLen / 2);
+    if (dir < 0) cone.rotation.x = Math.PI; // flip the lower beam to point down
+    group.add(cone);
+  }
+  beacons.push({ material });
+  return group;
+}
+
 function makeBlackHole(node) {
   const r = MIN_PLANET_R + clamp01(Number(node.size_scale) || 0) * 0.9;
   const hole = new THREE.Mesh(
     new THREE.SphereGeometry(r, 28, 28),
     new THREE.MeshBasicMaterial({ color: 0x000000 }),
   );
+  hole.add(makeBlackHoleBeacon(r));
   blackHoles.push({ mesh: hole, radius: r });
   return hole;
 }
@@ -1261,6 +1296,10 @@ function animate() {
   paintLinks(elapsed);
   if (focusChain && focusHalo) {
     focusHalo.material.opacity = 0.55 + 0.3 * Math.sin(elapsed * PULSE_SPEED);
+  }
+  if (beacons.length) {
+    const beaconOpacity = BEACON_OPACITY + 0.12 * Math.sin(elapsed * BEACON_PULSE_SPEED);
+    for (const b of beacons) b.material.opacity = beaconOpacity;
   }
   updateLensUniforms();
   composer.render();

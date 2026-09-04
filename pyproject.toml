@@ -35,7 +35,6 @@ crawl = [
     "beautifulsoup4>=4.12.0",
     "mdformat>=0.7.19",
     "mdformat-gfm>=0.3.6",
-    "nest-asyncio>=1.5.0",
     "httpx>=0.27.0",
     "truststore>=0.9",
     "pydantic>=2.0",
@@ -74,7 +73,6 @@ dev = [
     "pytest-asyncio>=0.21",
     "pytest-cov>=4.1",
     "ruff>=0.4.0",
-    "ipykernel>=6.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -84,6 +82,8 @@ where = ["src"]
 target-version = "py310"
 line-length = 100
 src = ["src", "tests"]
+# Vendored agent-skill templates are managed by skills-lock.json, not linted here.
+extend-exclude = [".agents"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B", "SIM"]

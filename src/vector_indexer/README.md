@@ -2,7 +2,7 @@
 
 UI-independent Python library that turns text documents into a persisted vector
 index. It powers **Step 2 — Build Vector Index** in the Streamlit app, but it has
-no Streamlit dependency and is equally usable from a notebook, a CLI, or tests.
+no Streamlit dependency and is equally usable from any UI, a CLI, or tests.
 
 ## What it does
 

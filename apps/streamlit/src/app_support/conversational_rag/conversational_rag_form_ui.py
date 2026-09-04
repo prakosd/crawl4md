@@ -23,13 +23,15 @@ from rag_engine import (
     ValidatedFollowup,
 )
 
+from app_support.basic_rag_qa.basic_rag_qa_form_ui import tone_choices
 from app_support.i18n._types import Strings
+from app_support.rag_shared.index_catalog import IndexRef
 from app_support.rag_shared.llm_form_ui import (
+    chat_model_choices,
     chat_model_label,
-    render_llm_controls,
     resolve_chat_model_choices,
 )
-from app_support.rag_shared.rag_ui import kv_grid_html, render_result_cards
+from app_support.rag_shared.rag_ui import kv_grid_html, render_result_cards, select_index
 from app_support.settings import get_settings
 
 __all__ = [
@@ -43,14 +45,19 @@ __all__ = [
 ]
 
 _RERANKER_KEYS = ("off", "local", "llm")
+# Panel layout mirrors Step 4's Basic RAG Q&A panel: a wide control + a compact one.
+_PANEL_COLUMN_WIDTHS = (0.8, 0.2)
+_MAX_TOP_K = 20
 
 
 @dataclass(frozen=True)
 class ConversationalControls:
     """The Step 5 UI choices that shape a :class:`ConversationalConfig`."""
 
+    index: IndexRef | None
     answer_model: str
     top_k: int
+    tone: str
     reranker: str
     aux_model_id: str
     decomposition: bool
@@ -83,17 +90,55 @@ def build_conversational_config(controls: ConversationalControls) -> Conversatio
         followup_show_count=settings.conv_rag_followup_show_count,
         followup_min_score=controls.followup_keep,
         followup_drop_score=controls.followup_drop,
+        tone=controls.tone,
     )
 
 
 def render_advanced_controls(
-    strings: Strings, key_prefix: str, *, disabled: bool = False
+    strings: Strings, key_prefix: str, indexes: Sequence[IndexRef]
 ) -> ConversationalControls:
-    """Render the answer-model row and the advanced options; return the choices."""
+    """Render the index / chunks / model / tone panel and the advanced options."""
     settings = get_settings()
-    answer_model, top_k = render_llm_controls(
-        strings=strings, key_prefix=key_prefix, disabled=disabled
-    )
+    model_options, model_default = chat_model_choices()
+    tones, tone_default = tone_choices()
+    with st.container(border=True):
+        index_col, chunks_col = st.columns(_PANEL_COLUMN_WIDTHS, vertical_alignment="center")
+        with index_col:
+            index = select_index(strings, indexes, key=f"{key_prefix}_index")
+        disabled = index is None
+        with chunks_col:
+            top_k = int(
+                st.number_input(
+                    strings["RAG_TOP_K_LABEL"],
+                    min_value=1,
+                    max_value=_MAX_TOP_K,
+                    value=settings.rag_top_k,
+                    step=1,
+                    help=strings["RAG_TOP_K_HELP"],
+                    disabled=disabled,
+                    key=f"{key_prefix}_top_k",
+                )
+            )
+        model_col, tone_col = st.columns(_PANEL_COLUMN_WIDTHS)
+        with model_col:
+            answer_model = st.selectbox(
+                strings["RAG_LLM_LABEL"],
+                options=model_options,
+                index=model_default,
+                format_func=lambda model_id: chat_model_label(model_id, strings),
+                help=strings["RAG_LLM_HELP"],
+                disabled=disabled,
+                key=f"{key_prefix}_llm_model",
+            )
+        with tone_col:
+            tone = st.selectbox(
+                strings["BASIC_QA_TONE_LABEL"],
+                options=tones,
+                index=tone_default,
+                help=strings["BASIC_QA_TONE_HELP"],
+                disabled=disabled,
+                key=f"{key_prefix}_tone",
+            )
     with st.expander(strings["CONV_ADVANCED_LABEL"], expanded=False):
         reranker_labels = {
             "off": strings["CONV_RERANKER_OFF"],
@@ -159,8 +204,10 @@ def render_advanced_controls(
                 key=f"{key_prefix}_inspect",
             )
     return ConversationalControls(
+        index=index,
         answer_model=answer_model,
         top_k=top_k,
+        tone=tone,
         reranker=reranker,
         aux_model_id=aux_model_id,
         decomposition=decomposition,

@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-import nest_asyncio
 
 from artifact_store import LibraryMessage
 from crawl4md import messages
@@ -180,9 +179,6 @@ from crawl4md.naming import format_utc_timestamp_slug
 from crawl4md.progress import ProgressReporter
 from crawl4md.writer import FileWriter, PageIndexEntry, PageSidecar
 from log4py import get_logger
-
-# Applied lazily by SiteCrawler._run_rounds_sync so Streamlit's uvloop is never
-# patched at import time.
 
 
 class _LazyModule:
@@ -702,17 +698,12 @@ class SiteCrawler:
                 return pool.submit(self._run_rounds_in_proactor_loop).result()
 
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
         except RuntimeError:
             return asyncio.run(self._run_rounds_async())
 
-        try:
-            nest_asyncio.apply(loop)
-        except ValueError:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                return pool.submit(self._run_rounds_in_new_loop).result()
-
-        return loop.run_until_complete(self._run_rounds_async())
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(self._run_rounds_in_new_loop).result()
 
     # ------------------------------------------------------------------
     # Round orchestration
@@ -931,18 +922,6 @@ class SiteCrawler:
             total_crawled,
             self.output_dir,
         )
-        # Clear any lingering progress widget from the final round so the
-        # summary text below isn't shown beneath a stale (partial-percent)
-        # bar in Jupyter / Colab.
-        try:
-            from IPython import get_ipython  # type: ignore[import-untyped]
-
-            if get_ipython() is not None:
-                from IPython.display import clear_output  # type: ignore[import-untyped]
-
-                clear_output(wait=True)
-        except ImportError:
-            pass
         self._report_status(
             f"\n{label}! {len(all_success)} succeeded, {len(all_fail)} failed out of {total_crawled} total."
         )
@@ -987,7 +966,7 @@ class SiteCrawler:
             self._emit_crawl_warning(messages.ocr_unavailable())
 
     def _report_status(self, message: str) -> None:
-        """Render a crawl-flow status line for terminal and notebook users.
+        """Render a crawl-flow status line for terminal users.
 
         Centralizes the crawler's own stdout so core logic does not call
         ``print`` directly; a UI that consumes progress events can ignore it.
@@ -1830,8 +1809,6 @@ class SiteCrawler:
             # call ``progress.update``, so the bar would otherwise end below
             # 100%.  Sync ``total`` to the actual number processed.
             progress.total = max(progress.count, 1)
-            if progress._use_notebook:
-                progress._refresh_display(force=True)
 
             return results
         finally:

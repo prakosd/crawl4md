@@ -28,7 +28,6 @@
     "vscode": {
       "extensions": [
         "ms-python.python",
-        "ms-toolsai.jupyter",
         "charliermarsh.ruff"
       ],
       "settings": {

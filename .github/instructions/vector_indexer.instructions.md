@@ -7,7 +7,7 @@ applyTo: "src/vector_indexer/**, tests/test_vector_indexer_*.py"
 
 UI-independent library that loads documents, chunks them, embeds the chunks, and
 persists them to a vector store behind an interface. Powers Step 2 of the app but
-must stay usable from a notebook, CLI, or tests without Streamlit.
+must stay usable from any UI, CLI, or tests without Streamlit.
 
 ## Data flow
 

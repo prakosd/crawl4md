@@ -7,7 +7,7 @@ applyTo: "src/rag_engine/**, tests/test_rag_engine_*.py"
 
 UI-independent retrieval-augmented generation over the indexes built by
 `vector_indexer`. Powers Steps 3-5 of the app (semantic search, single-turn QA,
-conversational RAG) but must stay usable from a notebook, CLI, or tests without
+conversational RAG) but must stay usable from any UI, CLI, or tests without
 Streamlit.
 
 ## Data flow

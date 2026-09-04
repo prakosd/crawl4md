@@ -5,7 +5,7 @@ Per-page failures set :attr:`~crawl4md.config.CrawlResult.error_code` to one of 
 warnings are emitted as ``crawl_warning`` progress events carrying a
 :class:`~artifact_store.LibraryMessage`, and :func:`classify_crawl_error` turns a
 fatal crawl exception into a coded message a UI can localize. ``default_text`` is the
-English shown when no localization is available, so notebooks and logs stay readable.
+English shown when no localization is available, so terminal output and logs stay readable.
 """
 
 from __future__ import annotations

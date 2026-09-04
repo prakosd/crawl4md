@@ -3,7 +3,7 @@
 A :class:`LibraryMessage` carries a stable machine-readable ``code`` plus the
 structured ``params`` behind it, so a UI can localize or restyle the message
 without parsing English prose. ``default_text`` is a ready-to-show English
-sentence, so notebooks, logs, and JSON manifests stay readable even when no
+sentence, so logs and JSON manifests stay readable even when no
 localization layer is present (``str(message)`` returns it).
 
 This module is part of the pure foundation: standard library only.
@@ -36,7 +36,7 @@ class LibraryMessage:
         code: Stable identifier a UI maps to a localized template, e.g.
             ``"vector.dimension_mismatch"``. Not meant to be shown verbatim.
         default_text: Complete English sentence shown when no localization is
-            available. ``str(message)`` returns this, so notebooks, logs, and
+            available. ``str(message)`` returns this, so logs and
             JSON manifests stay readable.
         params: Structured values behind the message (counts, names, URLs) that a
             UI can interpolate into its own localized template.

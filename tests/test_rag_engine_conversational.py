@@ -174,6 +174,38 @@ def test_conversational_answer_updates_state(tmp_path: Path) -> None:
     assert result.state.recent_resolved == ("What is the capital of France?",)
 
 
+def test_conversational_answer_threads_tone_into_prompt(tmp_path: Path) -> None:
+    captured: dict[str, str] = {}
+
+    class _CapturingModel(SimpleChatModel):
+        @property
+        def _llm_type(self) -> str:
+            return "capturing"
+
+        def _call(self, messages, stop=None, run_manager=None, **kwargs) -> str:
+            captured["system"] = messages[0].content
+            return "ANSWER"
+
+    def main_resolver(model_id, *, temperature=0.0, max_tokens=1024):
+        return ResolvedChatModel(model=_CapturingModel(), model_id="main"), []
+
+    def retriever(run_dir, query, config):
+        return RetrievalResult(chunks=list(_CHUNKS))
+
+    conversational_answer(
+        tmp_path,
+        "What is the capital of France?",
+        ConversationState(),
+        ConversationalConfig(reranker="off", tone="Formal"),
+        retriever=retriever,
+        chat_resolver=main_resolver,
+        aux_resolver=_echo_aux_resolver,
+    )
+
+    # The requested tone is baked into the grounded-answer system prompt.
+    assert "Formal" in captured["system"]
+
+
 def test_conversational_answer_populates_followups(tmp_path: Path) -> None:
     def retriever(run_dir, query, config):
         return RetrievalResult(

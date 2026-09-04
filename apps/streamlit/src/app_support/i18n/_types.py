@@ -61,8 +61,6 @@ class Strings(TypedDict):
     RAG_LLM_SIZE_SMALL: str
     RAG_LLM_SIZE_MEDIUM: str
     RAG_LLM_SIZE_LARGE: str
-    RAG_LLM_INDICATOR_OFFLINE: str
-    RAG_LLM_INDICATOR_CLOUD: str
     RAG_TOP_K_LABEL: str
     RAG_TOP_K_HELP: str
     RAG_SOURCES_HEADER: str

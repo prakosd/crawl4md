@@ -1,8 +1,10 @@
-"""Safe extraction of text members from user-supplied zip archives.
+"""Safe extraction of members from user-supplied zip archives.
 
 Downstream tools accept ``.zip`` uploads that may contain arbitrary members. The
-helpers here enforce a strict allow-list (``.md``/``.txt`` only) and reject any
-member name that could escape the destination directory (zip-slip protection).
+text helpers enforce a strict allow-list (``.md``/``.txt`` only); ``extract_all_members``
+keeps every member (e.g. a binary vector store) for trusted, HMAC-verified
+re-imports. All paths reject any member name that could escape the destination
+directory (zip-slip protection).
 """
 
 from __future__ import annotations
@@ -38,11 +40,17 @@ SIGNATURE_MEMBER = ".crawl4md.sig"
 # never loads a whole file into memory.
 _HMAC_CHUNK_BYTES = 1024 * 1024
 
-# Per-member decompressed-size cap. ``member.read`` is bounded to this many bytes
-# so a decompression bomb (a tiny compressed member that inflates to gigabytes)
-# cannot exhaust memory; members larger than this are skipped like other
-# unsupported members.
+# Per-member decompressed-size cap for in-memory reads. ``member.read`` on the
+# text-member paths is bounded to this many bytes so a decompression bomb (a tiny
+# compressed member that inflates to gigabytes) cannot exhaust memory; oversized
+# text members are skipped like other unsupported members. The trusted
+# full-folder re-import path streams to disk instead (see ``extract_all_members``)
+# and is not subject to this cap.
 _MAX_MEMBER_BYTES = 50 * 1024 * 1024
+
+# Chunk size for streaming a trusted archive member to disk without buffering the
+# whole (potentially large) file in memory.
+_COPY_CHUNK_BYTES = 1024 * 1024
 
 _logger = get_logger(__name__)
 
@@ -118,9 +126,12 @@ def extract_all_members(zip_path: Path | str, dest_dir: Path | str) -> list[Path
 
     Unlike ``extract_text_members`` this keeps binary members (e.g. a vector
     store), so a previously exported folder can be re-imported intact. The
-    signature sidecar is skipped, unsafe names are rejected, containment is
-    enforced, and members larger than ``_MAX_MEMBER_BYTES`` are skipped as a
-    decompression-bomb guard. Returns the written file paths.
+    signature sidecar is skipped, unsafe names are rejected, and containment is
+    enforced before any bytes are written. Each member is streamed to disk in
+    fixed-size chunks so memory stays bounded regardless of member size; because
+    this path serves only HMAC-verified (trusted) re-imports there is no
+    per-member size cap, so large vector stores import intact. Returns the
+    written file paths.
     """
     destination = Path(dest_dir)
     destination.mkdir(parents=True, exist_ok=True)
@@ -134,17 +145,15 @@ def extract_all_members(zip_path: Path | str, dest_dir: Path | str) -> list[Path
             if not is_safe_member_name(name):
                 _logger.warning("Skipping unsafe zip member name: %r", name)
                 continue
-            with archive.open(info) as member:
-                data = member.read(_MAX_MEMBER_BYTES + 1)
-            if len(data) > _MAX_MEMBER_BYTES:
-                _logger.warning("Skipping oversized zip member %r (decompression-bomb guard)", name)
-                continue
             try:
                 target = ensure_within_root(resolved_dest, destination / name)
             except ValueError:
+                _logger.warning("Skipping zip member outside destination: %r", name)
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(data)
+            with archive.open(info) as member, target.open("wb") as handle:
+                while chunk := member.read(_COPY_CHUNK_BYTES):
+                    handle.write(chunk)
             written.append(target)
     return written
 

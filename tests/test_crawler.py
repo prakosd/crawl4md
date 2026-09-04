@@ -20,29 +20,7 @@ from crawl4md.writer import FileWriter
 from tests.conftest import _make_mock_result
 
 
-def test_run_rounds_sync_reuses_supported_running_loop() -> None:
-    crawler = SiteCrawler(CrawlerConfig(urls=["https://example.com"]))
-    loop = asyncio.new_event_loop()
-
-    async def fake_run_rounds_async() -> list[str]:
-        return ["ok"]
-
-    crawler._run_rounds_async = fake_run_rounds_async  # type: ignore[method-assign]
-
-    try:
-        with (
-            patch("crawl4md.crawler.sys.platform", "linux"),
-            patch("crawl4md.crawler.asyncio.get_running_loop", return_value=loop),
-            patch("crawl4md.crawler.nest_asyncio.apply") as mock_apply,
-        ):
-            assert crawler._run_rounds_sync() == ["ok"]
-
-        mock_apply.assert_called_once_with(loop)
-    finally:
-        loop.close()
-
-
-def test_run_rounds_sync_uses_worker_loop_for_unsupported_running_loop() -> None:
+def test_run_rounds_sync_uses_worker_loop_when_loop_running() -> None:
     crawler = SiteCrawler(CrawlerConfig(urls=["https://example.com"]))
 
     class _ImmediateFuture:
@@ -62,14 +40,11 @@ def test_run_rounds_sync_uses_worker_loop_for_unsupported_running_loop() -> None
         def submit(self, fn):
             return _ImmediateFuture(fn())
 
-    unsupported_loop = object()
+    running_loop = object()
 
     with (
         patch("crawl4md.crawler.sys.platform", "linux"),
-        patch("crawl4md.crawler.asyncio.get_running_loop", return_value=unsupported_loop),
-        patch(
-            "crawl4md.crawler.nest_asyncio.apply", side_effect=ValueError("unsupported")
-        ) as mock_apply,
+        patch("crawl4md.crawler.asyncio.get_running_loop", return_value=running_loop),
         patch(
             "crawl4md.crawler.concurrent.futures.ThreadPoolExecutor",
             return_value=_ImmediateExecutor(),
@@ -78,9 +53,26 @@ def test_run_rounds_sync_uses_worker_loop_for_unsupported_running_loop() -> None
     ):
         assert crawler._run_rounds_sync() == ["ok"]
 
-    mock_apply.assert_called_once_with(unsupported_loop)
     mock_executor.assert_called_once_with(max_workers=1)
     mock_runner.assert_called_once_with()
+
+
+def test_run_rounds_sync_completes_from_within_running_loop() -> None:
+    crawler = SiteCrawler(CrawlerConfig(urls=["https://example.com"]))
+
+    async def fake_run_rounds_async() -> list[str]:
+        return ["ok"]
+
+    crawler._run_rounds_async = fake_run_rounds_async  # type: ignore[method-assign]
+
+    async def driver() -> list[str]:
+        # A loop is already running on this thread, so _run_rounds_sync must
+        # offload to a worker thread running _run_rounds_in_new_loop instead of
+        # nesting the crawl inside the caller's loop.
+        return crawler._run_rounds_sync()
+
+    with patch("crawl4md.crawler.sys.platform", "linux"):
+        assert asyncio.run(driver()) == ["ok"]
 
 
 def test_run_rounds_sync_uses_asyncio_run_without_running_loop() -> None:

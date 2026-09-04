@@ -66,7 +66,7 @@ The shared primitive is `artifact_store.LibraryMessage`:
 | Field | Meaning |
 |---|---|
 | `code` | Stable identifier, e.g. `"vector.model_unavailable"` or `"crawl.browser_missing"`. Map it to your own localized template. Never shown verbatim. |
-| `default_text` | A complete English sentence. `str(message)` returns it, so logs, notebooks, and JSON stay readable when you have no localization. |
+| `default_text` | A complete English sentence. `str(message)` returns it, so logs and JSON stay readable when you have no localization. |
 | `params` | Structured values behind the message (counts, file names, model ids) to interpolate into your localized template. |
 | `severity` | `"info"`, `"warning"`, or `"error"`. |
 

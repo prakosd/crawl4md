@@ -3,7 +3,7 @@
 ``log4py`` is the lowest layer of the project: pure standard library, no
 dependencies (not even on the other project packages), so any library can depend
 on it. Libraries obtain a logger through :func:`get_logger` and emit records
-freely; the *application* (or a notebook) decides the threshold, format, and
+freely; the *application* decides the threshold, format, and
 destinations with a single :func:`configure_logging` call. Libraries never attach
 their own output handlers, so importing a library stays silent until an app opts
 in — the behaviour recommended by the Python logging HOWTO for libraries.
@@ -35,7 +35,7 @@ _DEFAULT_MAX_BYTES = 5 * 1024 * 1024
 _DEFAULT_BACKUP_COUNT = 3
 
 # Tags handlers this module installs so a repeated configure_logging call
-# (notebooks, tests, or a re-init) replaces them instead of stacking duplicates.
+# (tests or a re-init) replaces them instead of stacking duplicates.
 _MANAGED_HANDLER_ATTR = "_log4py_managed"
 
 # The logger names a previous configure_logging call attached handlers to, so the
@@ -143,7 +143,7 @@ def configure_logging(
 ) -> None:
     """Configure the given loggers to emit at *level* to stderr and/or a file.
 
-    Call once from the application (or a notebook). Safe to call repeatedly: any
+    Call once from the application. Safe to call repeatedly: any
     handlers a previous call installed are detached (and file handlers closed)
     first, so a Streamlit rerun never stacks duplicate handlers.
 

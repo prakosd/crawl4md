@@ -9,8 +9,10 @@ from app_support.conversational_rag.conversational_rag_form_ui import (
 
 def _controls(**overrides) -> ConversationalControls:
     values = dict(
+        index=None,
         answer_model="gpt-4o",
         top_k=6,
+        tone="Formal",
         reranker="llm",
         aux_model_id="echo",
         decomposition=False,
@@ -34,6 +36,7 @@ def test_build_config_maps_controls() -> None:
     assert config.followups_enabled is True
     assert config.followup_drop_score == 0.3
     assert config.followup_min_score == 0.7
+    assert config.tone == "Formal"
 
 
 def test_build_config_blank_aux_becomes_none() -> None:

@@ -17,12 +17,10 @@ env/
 coverage*.xml
 htmlcov/
 .mypy_cache/
-.ipynb_checkpoints/
 .env
 .streamlit/secrets.toml
 
 # Crawl output directories (timestamped folders created by crawl4md)
-notebooks/*/
 outputs/
 
 # Developer log files (per-session logs live under outputs/; never commit logs)

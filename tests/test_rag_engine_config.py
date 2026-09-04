@@ -77,6 +77,7 @@ def test_conversational_config_defaults() -> None:
     assert config.followups_enabled is True
     assert config.followup_drop_score <= config.followup_min_score
     assert config.max_workers >= 1
+    assert config.tone == "Neutral"
 
 
 @pytest.mark.parametrize(
@@ -91,11 +92,16 @@ def test_conversational_config_defaults() -> None:
         {"followup_candidate_count": 0},
         {"max_workers": 0},
         {"plan_recent_turns": -1},
+        {"tone": "   "},
     ],
 )
 def test_conversational_config_rejects_invalid(overrides: dict) -> None:
     with pytest.raises(ValidationError):
         ConversationalConfig(**overrides)
+
+
+def test_conversational_config_strips_tone() -> None:
+    assert ConversationalConfig(tone="  Formal  ").tone == "Formal"
 
 
 def test_conversational_config_accepts_custom_values() -> None:

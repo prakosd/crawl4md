@@ -2,7 +2,7 @@
 
 ## Overview
 
-crawl4md crawls websites and extracts content as Markdown. The core `crawl4md` library wraps Crawl4AI with a synchronous API (for Jupyter); a Streamlit app under `apps/streamlit/` offers a browser form. Four helper libraries support it: `log4py` (zero-dependency, pure-stdlib logging base layer everything may import), `artifact_store` (shared naming/paths/archive/discovery helpers), `vector_indexer` (UI-independent chunking + embedding + vector-store creation via LangChain, powering the app's Step 2), and `rag_engine` (UI-independent retrieval + QA + conversational RAG over an index, powering Steps 3-5).
+crawl4md crawls websites and extracts content as Markdown. The core `crawl4md` library wraps Crawl4AI with a synchronous API; a Streamlit app under `apps/streamlit/` offers a browser form. Four helper libraries support it: `log4py` (zero-dependency, pure-stdlib logging base layer everything may import), `artifact_store` (shared naming/paths/archive/discovery helpers), `vector_indexer` (UI-independent chunking + embedding + vector-store creation via LangChain, powering the app's Step 2), and `rag_engine` (UI-independent retrieval + QA + conversational RAG over an index, powering Steps 3-5).
 
 **Package map** (full structure + diagrams in [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)):
 

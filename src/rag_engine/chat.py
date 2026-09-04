@@ -32,7 +32,12 @@ from rag_engine.models import (
     RetrievedChunk,
     ValidatedFollowup,
 )
-from rag_engine.prompts import CONDENSE_SYSTEM_PROMPT, QA_SYSTEM_PROMPT, format_context
+from rag_engine.prompts import (
+    _DEFAULT_TONE,
+    CONDENSE_SYSTEM_PROMPT,
+    QA_SYSTEM_PROMPT,
+    format_context,
+)
 from rag_engine.rerank import rerank_chunks
 from rag_engine.retrieval import RetrievalResult, retrieve, retrieve_multi
 
@@ -80,6 +85,8 @@ def _chat_chain(
     chat_model: BaseChatModel,
     chunks: Sequence[RetrievedChunk],
     history: Sequence[ChatTurn],
+    *,
+    tone: str = _DEFAULT_TONE,
 ) -> tuple[Any, dict]:
     from langchain_core.output_parsers import StrOutputParser
     from langchain_core.prompts import ChatPromptTemplate
@@ -87,7 +94,8 @@ def _chat_chain(
     prompt = ChatPromptTemplate.from_messages(
         [("system", QA_SYSTEM_PROMPT), *_history_messages(history), ("human", "{question}")]
     )
-    return prompt | chat_model | StrOutputParser(), {"context": format_context(chunks)}
+    base = {"context": format_context(chunks), "tone": tone}
+    return prompt | chat_model | StrOutputParser(), base
 
 
 def generate_chat_answer(
@@ -95,9 +103,11 @@ def generate_chat_answer(
     question: str,
     chunks: Sequence[RetrievedChunk],
     history: Sequence[ChatTurn],
+    *,
+    tone: str = _DEFAULT_TONE,
 ) -> str:
     """Generate a conversational answer string."""
-    chain, base = _chat_chain(chat_model, chunks, history)
+    chain, base = _chat_chain(chat_model, chunks, history, tone=tone)
     return chain.invoke({**base, "question": question})
 
 
@@ -106,9 +116,11 @@ def stream_chat_answer(
     question: str,
     chunks: Sequence[RetrievedChunk],
     history: Sequence[ChatTurn],
+    *,
+    tone: str = _DEFAULT_TONE,
 ) -> Iterator[str]:
     """Yield conversational answer tokens as they are generated."""
-    chain, base = _chat_chain(chat_model, chunks, history)
+    chain, base = _chat_chain(chat_model, chunks, history, tone=tone)
     yield from chain.stream({**base, "question": question})
 
 
@@ -310,13 +322,14 @@ def _answer_stage(
     raw_question: str,
     chunks: Sequence[RetrievedChunk],
     history: Sequence[ChatTurn],
+    tone: str,
 ) -> tuple[str, list[LibraryMessage], float]:
     """Generate the grounded answer, returning (text, errors, elapsed seconds)."""
     errors: list[LibraryMessage] = []
     start = perf_counter()
     answer_text = ""
     try:
-        answer_text = generate_chat_answer(resolved.model, raw_question, chunks, history)
+        answer_text = generate_chat_answer(resolved.model, raw_question, chunks, history, tone=tone)
     except Exception as exc:  # noqa: BLE001 - boundary around the chat backend
         _logger.warning("Conversational RAG generation failed: %s", exc)
         errors.append(messages.classify_generation_failure(str(exc)))
@@ -375,7 +388,9 @@ def _compose_turn(
     _report(progress_callback, messages.progress_answer())
     follow_ups: list[ValidatedFollowup] = []
     with ThreadPoolExecutor(max_workers=2) as executor:
-        answer_future = executor.submit(_answer_stage, resolved, raw_question, chunks, history)
+        answer_future = executor.submit(
+            _answer_stage, resolved, raw_question, chunks, history, config.tone
+        )
         followups_future = (
             executor.submit(_followups_stage, run_dir, aux, chunks, plan, config, retriever)
             if config.followups_enabled and aux.model_id != ECHO_MODEL

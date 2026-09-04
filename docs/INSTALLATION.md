@@ -25,7 +25,6 @@ flowchart TD
   Codespaces --> UseCase{"Preferred interface?"}
   DevContainer --> UseCase
   UseCase -->|Non-technical users| Streamlit["Streamlit web app<br/>http://localhost:8501"]
-  UseCase -->|Technical users| Notebook["Jupyter notebook<br/>notebooks/crawl4md.ipynb"]
   UseCase -->|Library users| PythonAPI["Python API<br/>SiteCrawler, configs, extractor, writer"]
 ```
 
@@ -38,13 +37,29 @@ configured VS Code environment in your browser. Free tier: 120 core-hours/month.
 2. Open this folder in VS Code.
 3. Click **Reopen in Container** in the notification, or run `Cmd/Ctrl+Shift+P` → **Dev Containers: Reopen in Container**.
 4. First start takes ~5 minutes (pulls base image, installs Tesseract, Chromium, and Python packages). Subsequent opens are fast.
-5. For non-technical users, open the Streamlit web app at `http://localhost:8501`; it starts automatically when VS Code attaches to the container. Technical users can also open `notebooks/crawl4md.ipynb`, select the in-container Python 3.12 kernel, and run the cells.
+5. For non-technical users, open the Streamlit web app at `http://localhost:8501`; it starts automatically when VS Code attaches to the container.
 
 ## Local install
 
 The pip distribution is `rag-playground`. Install it from a clone. The **base
 install pulls no third-party packages** (the `artifact_store` library is pure
 standard library) — add the extra(s) for the component you need.
+
+### One-command setup
+
+For the full development environment (all libraries + the Streamlit app + the
+crawler browser), the bundled task runner does every step below in one go:
+
+```bash
+python dev.py install   # create .venv, pip install, playwright, crawl4ai-setup
+python dev.py run       # launch the Streamlit app
+```
+
+`dev.py` uses only the standard library, so it runs before any dependency is
+installed. The manual steps below are the equivalent for a partial install or
+when you want more control.
+
+### Manual install
 
 Work in an isolated virtualenv so the editable installs stay separate from any
 system or Conda environment:
@@ -98,14 +113,14 @@ Every library is an opt-in extra so each install stays lightweight:
 
 | Extra | Adds | Used for |
 |---|---|---|
-| `crawl` | `crawl4ai`, `trafilatura`, `markdownify`, `beautifulsoup4`, `mdformat`, `mdformat-gfm`, `nest-asyncio`, `httpx`, `truststore`, `pydantic`, `pymupdf4llm` (pulls `pymupdf`), `mammoth` | crawling + Markdown extraction, incl. PDF/DOCX (Step 1) |
+| `crawl` | `crawl4ai`, `trafilatura`, `markdownify`, `beautifulsoup4`, `mdformat`, `mdformat-gfm`, `httpx`, `truststore`, `pydantic`, `pymupdf4llm` (pulls `pymupdf`), `mammoth` | crawling + Markdown extraction, incl. PDF/DOCX (Step 1) |
 | `vector` | `langchain-chroma` (pulls `chromadb`), `langchain-text-splitters`, `langchain-core`, `pydantic` | chunking + vector store (Step 2) |
 | `bedrock` | `langchain-aws` (pulls `boto3`) | Amazon Titan embeddings **and** Bedrock chat models |
 | `openai` | `langchain-openai` (pulls `openai`) | OpenAI embeddings **and** chat models |
 | `rag` | `langchain` (umbrella), `langchain-core`, `pydantic` | retrieval + QA + conversational RAG (Steps 3-5) |
 | `rerank` | `sentence-transformers` (pulls `torch`) | Step 5 local cross-encoder re-ranker (heavy; the LLM/off re-rankers need it not) |
 | `all` | `crawl` + `vector` + `bedrock` + `openai` + `rag` + `rerank` | the full playground |
-| `dev` | `pytest`, `pytest-asyncio`, `pytest-cov`, `ruff`, `ipykernel` | tests, lint, notebook kernel |
+| `dev` | `pytest`, `pytest-asyncio`, `pytest-cov`, `ruff` | tests, lint |
 
 The extras are **audited to stay atomic**: every package listed above is imported by
 the component it belongs to (no unused dependencies), and each feature's libraries
@@ -146,18 +161,7 @@ default embedding model needs no credentials, and without chat credentials
 > **Workaround if you must use Python 3.14:**
 > ```bash
 > pip install -e ".[crawl]" --no-deps
-> pip install --only-binary lxml crawl4ai trafilatura markdownify pydantic nest-asyncio "chardet<6,>=5.2.0" beautifulsoup4 mdformat mdformat-gfm pymupdf4llm httpx --no-deps
+> pip install --only-binary lxml crawl4ai trafilatura markdownify pydantic "chardet<6,>=5.2.0" beautifulsoup4 mdformat mdformat-gfm pymupdf4llm httpx --no-deps
 > # then install the remaining transitive deps via pip as needed
 > ```
 > lxml 6.x (already available for 3.14) is API-compatible and works at runtime despite the version conflict warning.
-
-## Notebook usage
-
-The Jupyter Notebook is available for technical users who want to inspect or adjust
-the Python workflow step by step. Non-technical users should use the Streamlit app
-instead.
-
-See `notebooks/crawl4md.ipynb` for a guided, step-by-step notebook. You can also run
-it directly in Google Colab:
-
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/prakosd/rag-playground/blob/master/notebooks/crawl4md.ipynb)

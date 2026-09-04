@@ -2,7 +2,7 @@
 
 The core crawling library: it follows links, extracts the main content of each
 page, and writes clean, sorted Markdown. It is synchronous (no `async`/`await`
-needed) and usable from a notebook, a script, or any Python backend.
+needed) and usable from a script or any Python backend.
 
 For installation and the full configuration/output reference, see the repo
 docs: [INSTALLATION.md](../../docs/INSTALLATION.md), [CONFIGURATION.md](../../docs/CONFIGURATION.md),
@@ -39,7 +39,7 @@ mirrored in `vector_indexer.page_source` with a "keep in sync" note (no cross-li
 | `extractor.py` | `ContentExtractor` — HTML → Markdown (trafilatura / markdownify) |
 | `sorter.py` | `ContentSorter` — order pages by URL path |
 | `writer.py` | `FileWriter` — size-limited content files + URL lists || `naming.py` | Crawl folder/timestamp names (re-exports `artifact_store.naming`) |
-| `progress.py` | `ProgressReporter` — Jupyter/terminal progress |
+| `progress.py` | `ProgressReporter` — terminal progress |
 | `messages.py` | Stable result codes + `classify_crawl_error` (built on `artifact_store.LibraryMessage`) |
 | `_internal/` | Implementation details (final output, PDF, DOCX, URL filter, …) |
 

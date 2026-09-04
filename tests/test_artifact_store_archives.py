@@ -170,3 +170,47 @@ def test_extract_all_members_keeps_binary_and_skips_sidecar(tmp_path: Path) -> N
     assert sorted(p.name for p in written) == ["a.md", "index.bin"]
     assert (dest / "db" / "index.bin").read_bytes() == b"\x00\xff"
     assert not (dest / SIGNATURE_MEMBER).exists()
+
+
+def test_extract_all_members_streams_large_member_intact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("artifact_store.archives._COPY_CHUNK_BYTES", 8)
+    payload = bytes(range(256)) * 4  # spans many 8-byte streaming chunks
+    zip_path = tmp_path / "store.zip"
+    _make_zip(zip_path, {"chroma/data_level0.bin": payload})
+    dest = tmp_path / "out"
+
+    written = extract_all_members(zip_path, dest)
+
+    assert [p.name for p in written] == ["data_level0.bin"]
+    assert (dest / "chroma" / "data_level0.bin").read_bytes() == payload
+
+
+def test_extract_all_members_ignores_member_size_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("artifact_store.archives._MAX_MEMBER_BYTES", 4)
+    payload = b"\x00\xff" * 4096  # far larger than the (patched) text-path cap
+    zip_path = tmp_path / "store.zip"
+    _make_zip(zip_path, {"chroma.sqlite3": payload})
+    dest = tmp_path / "out"
+
+    extract_all_members(zip_path, dest)
+
+    assert (dest / "chroma.sqlite3").read_bytes() == payload
+
+
+def test_extract_all_members_skips_unsafe_member(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    zip_path = tmp_path / "evil.zip"
+    _make_zip(zip_path, {"ok.bin": b"\x01", "../escape.bin": b"bad"})
+    dest = tmp_path / "out"
+
+    with caplog.at_level(logging.WARNING, logger="artifact_store"):
+        written = extract_all_members(zip_path, dest)
+
+    assert [p.name for p in written] == ["ok.bin"]
+    assert not (tmp_path / "escape.bin").exists()
+    assert any("unsafe zip member" in record.getMessage() for record in caplog.records)

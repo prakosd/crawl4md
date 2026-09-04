@@ -556,6 +556,29 @@ def test_build_viewer_html_black_hole_is_dark_body() -> None:
     assert "blackHoleLensShader" in html  # gravitational lensing + photon ring kept
 
 
+# Risk: black holes are dark and hard to spot among many planets, so each carries
+# a pulsar-style beacon (two additive beams) pulsed each frame. It must stay a
+# pure-geometry effect — no THREE.Light — and be wired into the animation loop; if
+# the beacon or its pulse were dropped, failed pages become easy to miss. Type: unit.
+def test_build_viewer_html_black_hole_has_pulsar_beacon() -> None:
+    html = build_viewer_html(
+        _jsonl(
+            {
+                "url": "https://x.com",
+                "discovered_from": None,
+                "page_size_kb": 5.0,
+                "status": "success",
+                "depth": 0,
+                "round_num": 1,
+            }
+        ),
+        {},
+    )
+    assert "makeBlackHoleBeacon" in html  # beacon geometry inlined
+    assert "beacons" in html  # beacon bookkeeping present
+    assert "BEACON_PULSE_SPEED" in html  # per-frame pulse wired
+
+
 # Risk: a crawled URL could contain "</script>"; injected verbatim it would break
 # out of the bootstrap script tag. Verify the data is escaped, not raw. Type: unit.
 def test_build_viewer_html_escapes_script_breakout() -> None:

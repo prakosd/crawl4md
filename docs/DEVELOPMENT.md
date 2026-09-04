@@ -5,6 +5,12 @@
 ## Setup
 
 ```bash
+python dev.py install   # create .venv and install everything (one command)
+```
+
+Prefer to manage the virtualenv yourself:
+
+```bash
 pip install -e ".[dev,all]" -e "apps/streamlit[dev]"
 ```
 

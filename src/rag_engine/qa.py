@@ -18,7 +18,7 @@ from rag_engine import messages
 from rag_engine.config import RagConfig
 from rag_engine.llm import ResolvedChatModel, resolve_chat_model
 from rag_engine.models import RagAnswer, RetrievedChunk, TokenUsage
-from rag_engine.prompts import QA_SYSTEM_PROMPT, format_context
+from rag_engine.prompts import _DEFAULT_TONE, QA_SYSTEM_PROMPT, format_context
 from rag_engine.retrieval import RetrievalResult, retrieve
 
 if TYPE_CHECKING:
@@ -36,14 +36,19 @@ __all__ = [
 _logger = get_logger(__name__)
 
 
-def _qa_chain(chat_model: BaseChatModel, chunks: Sequence[RetrievedChunk]) -> tuple[Any, dict]:
+def _qa_chain(
+    chat_model: BaseChatModel, chunks: Sequence[RetrievedChunk], *, tone: str = _DEFAULT_TONE
+) -> tuple[Any, dict]:
     from langchain_core.output_parsers import StrOutputParser
     from langchain_core.prompts import ChatPromptTemplate
 
     prompt = ChatPromptTemplate.from_messages(
         [("system", QA_SYSTEM_PROMPT), ("human", "{question}")]
     )
-    return prompt | chat_model | StrOutputParser(), {"context": format_context(chunks)}
+    return prompt | chat_model | StrOutputParser(), {
+        "context": format_context(chunks),
+        "tone": tone,
+    }
 
 
 def generate_answer(

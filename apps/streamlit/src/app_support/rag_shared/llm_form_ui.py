@@ -1,15 +1,14 @@
 """Chat-model selector helpers for the RAG pages (Steps 4-5).
 
 Mirrors ``vector_form_ui``'s embedding selector: the pure option/label helpers
-are unit-testable without Streamlit, and ``render_llm_controls`` renders the
-model picker plus the "chunks to retrieve" control.
+(``chat_model_choices``, ``chat_model_label``) are unit-testable without Streamlit
+and drive the model pickers on the Basic and Conversational RAG pages.
 """
 
 from __future__ import annotations
 
 from collections.abc import Collection, Sequence
 
-import streamlit as st
 from rag_engine import CHAT_MODEL_OPTIONS, ECHO_MODEL, ChatModelInfo, get_chat_model_info
 
 from app_support.i18n import Strings
@@ -21,15 +20,11 @@ __all__ = [
     "chat_model_info_for",
     "chat_model_label",
     "chat_model_options",
-    "render_llm_controls",
     "resolve_chat_model_choices",
     "resolve_offered_from_pricing",
 ]
 
 _settings = get_settings()
-_DEFAULT_TOP_K = _settings.rag_top_k
-_MAX_TOP_K = 20
-_LLM_CONTROL_COLUMN_WIDTHS = (7, 3)
 _RAG_LLM_MODEL_ORDER = tuple(
     model.strip() for model in _settings.rag_llm_models.split(",") if model.strip()
 )
@@ -144,41 +139,3 @@ def chat_model_label(model_id: str, strings: Strings) -> str:
         return model_id
     tag_key = "RAG_LLM_TAG_OFFLINE" if info.kind == "local" else "RAG_LLM_TAG_CLOUD"
     return f"{info.label} · {strings[_SIZE_STRING_KEYS[info.size]]} · {strings[tag_key]}"
-
-
-def render_llm_controls(
-    *, strings: Strings, key_prefix: str, disabled: bool = False
-) -> tuple[str, int]:
-    """Render the chat-model picker and retrieval depth; return (model, top_k)."""
-    options, default_index = chat_model_choices()
-    with st.container(gap=None):
-        cols = st.columns(_LLM_CONTROL_COLUMN_WIDTHS)
-        with cols[0]:
-            model = st.selectbox(
-                strings["RAG_LLM_LABEL"],
-                options=options,
-                index=default_index,
-                format_func=lambda model_id: chat_model_label(model_id, strings),
-                help=strings["RAG_LLM_HELP"],
-                disabled=disabled,
-                key=f"{key_prefix}_llm_model",
-            )
-        with cols[1]:
-            top_k = int(
-                st.number_input(
-                    strings["RAG_TOP_K_LABEL"],
-                    min_value=1,
-                    max_value=_MAX_TOP_K,
-                    value=_DEFAULT_TOP_K,
-                    step=1,
-                    help=strings["RAG_TOP_K_HELP"],
-                    disabled=disabled,
-                    key=f"{key_prefix}_top_k",
-                )
-            )
-        info = chat_model_info_for(model)
-        if info.kind == "local":
-            st.caption(strings["RAG_LLM_INDICATOR_OFFLINE"])
-        else:
-            st.caption(strings["RAG_LLM_INDICATOR_CLOUD"])
-    return model, top_k

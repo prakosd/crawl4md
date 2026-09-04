@@ -53,10 +53,8 @@ STRINGS_EN: Strings = {
     ),
     "PAGE_CONVERSATIONAL_RAG_TITLE": ":material/forum: Step 5 - Conversational RAG",
     "PAGE_CONVERSATIONAL_RAG_SUBTITLE": (
-        "Have a multi-turn conversation with your documents. Each turn decomposes multi-part "
-        "questions, retrieves and re-ranks the most relevant passages, updates a running "
-        "conversation state, and suggests validated follow-up questions. Turn on Inspect mode "
-        "to see every stage."
+        "Have a back-and-forth conversation grounded in your documents — each answer draws on "
+        "the most relevant retrieved passages, and you can keep asking follow-ups."
     ),
     "PLACEHOLDER_SECTION_HEADER": "Step workspace",
     "PLACEHOLDER_SECTION_CAPTION": (
@@ -97,13 +95,6 @@ STRINGS_EN: Strings = {
     "RAG_LLM_SIZE_SMALL": "Small",
     "RAG_LLM_SIZE_MEDIUM": "Medium",
     "RAG_LLM_SIZE_LARGE": "Large",
-    "RAG_LLM_INDICATOR_OFFLINE": (
-        "Runs offline and repeats the question instead of generating an answer. Use it to "
-        "try the workflow without credentials."
-    ),
-    "RAG_LLM_INDICATOR_CLOUD": (
-        "Runs in the cloud. Needs an API key or credentials configured on the server."
-    ),
     "RAG_TOP_K_LABEL": "Chunks",
     "RAG_TOP_K_HELP": "How many of the most similar chunks to retrieve as context.",
     "RAG_SOURCES_HEADER": "Sources",
@@ -261,10 +252,10 @@ STRINGS_EN: Strings = {
     "BASIC_QA_HISTORY_META_TIME": "Search + answer",
     "BASIC_QA_HISTORY_TOKENS_VALUE": "{input} in · {output} out · {total} total",
     "BASIC_QA_HISTORY_TIME_BREAKDOWN": "{search}s + {answer}s = {total}s",
-    "CHAT_SECTION_HEADER": "💬 Chat with your documents",
+    "CHAT_SECTION_HEADER": ":material/mark_unread_chat_alt: Converse with your knowledge base",
     "CHAT_SECTION_CAPTION": (
-        "Each turn decomposes your question, retrieves and re-ranks passages, updates "
-        "conversation state, and proposes follow-ups it can answer."
+        "Ask a question, get a grounded answer, and keep following up — each reply is based on "
+        "the passages it retrieved."
     ),
     "CHAT_INPUT_PLACEHOLDER": "Ask a question…",
     "CHAT_CLEAR_BUTTON": "Clear conversation",

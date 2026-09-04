@@ -54,10 +54,8 @@ STRINGS_ID: Strings = {
     ),
     "PAGE_CONVERSATIONAL_RAG_TITLE": ":material/forum: Langkah 5 - Conversational RAG",
     "PAGE_CONVERSATIONAL_RAG_SUBTITLE": (
-        "Adakan percakapan multi-giliran dengan dokumen Anda. Setiap giliran memecah pertanyaan "
-        "multi-bagian, mengambil dan memeringkat ulang bagian paling relevan, memperbarui state "
-        "percakapan yang berjalan, dan menyarankan pertanyaan lanjutan yang tervalidasi. Aktifkan "
-        "mode Inspeksi untuk melihat setiap tahap."
+        "Adakan percakapan bolak-balik yang berlandaskan dokumen Anda — setiap jawaban mengambil "
+        "dari bagian paling relevan, dan Anda dapat terus mengajukan pertanyaan lanjutan."
     ),
     "PLACEHOLDER_SECTION_HEADER": "Area kerja langkah",
     "PLACEHOLDER_SECTION_CAPTION": (
@@ -99,13 +97,6 @@ STRINGS_ID: Strings = {
     "RAG_LLM_SIZE_SMALL": "Kecil",
     "RAG_LLM_SIZE_MEDIUM": "Sedang",
     "RAG_LLM_SIZE_LARGE": "Besar",
-    "RAG_LLM_INDICATOR_OFFLINE": (
-        "Berjalan offline dan mengulang pertanyaan alih-alih membuat jawaban. Gunakan "
-        "untuk mencoba alur tanpa kredensial."
-    ),
-    "RAG_LLM_INDICATOR_CLOUD": (
-        "Berjalan di cloud. Perlu API key atau kredensial yang dikonfigurasi di server."
-    ),
     "RAG_TOP_K_LABEL": "Chunk",
     "RAG_TOP_K_HELP": "Berapa banyak chunk paling mirip yang diambil sebagai konteks.",
     "RAG_SOURCES_HEADER": "Sumber",
@@ -266,10 +257,10 @@ STRINGS_ID: Strings = {
     "BASIC_QA_HISTORY_META_TIME": "Cari + jawab",
     "BASIC_QA_HISTORY_TOKENS_VALUE": "{input} in · {output} out · {total} total",
     "BASIC_QA_HISTORY_TIME_BREAKDOWN": "{search}s + {answer}s = {total}s",
-    "CHAT_SECTION_HEADER": "💬 Mengobrol dengan dokumen Anda",
+    "CHAT_SECTION_HEADER": ":material/mark_unread_chat_alt: Berbincang dengan basis pengetahuan Anda",
     "CHAT_SECTION_CAPTION": (
-        "Setiap giliran memecah pertanyaan Anda, mengambil dan memeringkat ulang bagian, "
-        "memperbarui state percakapan, dan mengusulkan pertanyaan lanjutan yang bisa dijawab."
+        "Ajukan pertanyaan, dapatkan jawaban yang berlandaskan sumber, dan terus lanjutkan — "
+        "setiap balasan didasarkan pada bagian yang diambil."
     ),
     "CHAT_INPUT_PLACEHOLDER": "Ajukan pertanyaan…",
     "CHAT_CLEAR_BUTTON": "Hapus percakapan",
